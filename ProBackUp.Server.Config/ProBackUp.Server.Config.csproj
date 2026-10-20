@@ -1,5 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-<PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>ProBackUp.Server.Config</AssemblyName><Version>3.4.0</Version><RuntimeFrameworkVersion>10.0.13</RuntimeFrameworkVersion><ApplicationManifest>../ProBackUp.App/app.manifest</ApplicationManifest><ApplicationIcon>../ProBackUp.App/app.ico</ApplicationIcon></PropertyGroup>
-<ItemGroup><PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.13"/><PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.13"/></ItemGroup>
-<ItemGroup><Compile Include="../ProBackUp.Server/Configuration.cs" Link="Configuration.cs"/><Compile Include="../ProBackUp.Server/DirectoryConnection.cs" Link="DirectoryConnection.cs"/><Compile Include="../ProBackUp.App/Appearance.cs" Link="Appearance.cs"/><EmbeddedResource Include="../assets/probackup-logo.png" LogicalName="logo.png"/><EmbeddedResource Include="../ProBackUp.App/app.ico" LogicalName="app.ico"/></ItemGroup>
-</Project>

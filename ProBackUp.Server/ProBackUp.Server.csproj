@@ -1,6 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
- <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>ProBackUp.Server</AssemblyName><Version>3.4.6</Version><ApplicationIcon>../ProBackUp.App/app.ico</ApplicationIcon><RuntimeFrameworkVersion>10.0.13</RuntimeFrameworkVersion><WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors><NuGetAuditMode>all</NuGetAuditMode></PropertyGroup>
- <ItemGroup><PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.13"/><PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13"/><PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13"/><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13"/><PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14"/></ItemGroup>
- <ItemGroup><Compile Include="../ProBackUp.Shared/CentralReport.cs" Link="CentralReport.cs"/><EmbeddedResource Include="www/*"/></ItemGroup>
- <ItemGroup><EmbeddedResource Include="../ProBackUp.App/app.ico" LogicalName="ProBackUp.Server.www.favicon.ico"/><EmbeddedResource Include="../assets/probackup-logo.png" LogicalName="ProBackUp.Server.www.logo.png"/></ItemGroup>
-</Project>
