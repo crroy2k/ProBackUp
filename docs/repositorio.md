@@ -1,11 +1,11 @@
 # Repositorio de ProBackUp
 
-Ramas: `main` contiene la base comun; `cliente`, `server` e `iis` parten de la misma version inicial y permiten desarrollar cada componente. Se conserva el arbol completo en todas las ramas porque comparten contratos, iconos, apariencia y scripts de construccion.
+`main` conserva el proyecto integrado. Las ramas especializadas contienen solamente su componente y las dependencias necesarias:
 
-- Cliente: `ProBackUp.App`, `ProBackUp.Setup`, `ProBackUp.Shared`, `assets`, `build.ps1`.
-- Servidor: `ProBackUp.Server`, `ProBackUp.Server.Config`, recursos compartidos, `build-server.ps1`.
-- IIS: servidor y scripts fuente de `IISProBackUpServer`, `build-iis.ps1`.
+- `cliente`: `ProBackUp.App`, `ProBackUp.Setup`, contratos `ProBackUp.Shared`, recursos visuales y `build.ps1`.
+- `server`: servidor central, configurador grafico, contratos, recursos visuales y `build-server.ps1`. No incluye el cliente ni scripts de IIS.
+- `iis`: servidor central y configurador necesarios para preparar LDAP/datos, contratos, recursos visuales, scripts de despliegue IIS y scripts de construccion del paquete. No incluye el cliente.
 
-Requisitos de compilacion: Windows x64 y SDK .NET 10. Ejecutar `build.ps1`, `build-server.ps1` o `build-iis.ps1` segun la distribucion. Los instaladores y ZIP se generan en `dist` y no forman parte del repositorio de fuentes. `build.ps1` genera el payload del instalador antes de compilarlo.
+Cada rama tiene su propio README con instrucciones. Los recursos de apariencia usados por el servidor estan en `assets`, sin dependencia del proyecto cliente.
 
-No se versionan certificados, claves privadas, configuraciones de maquinas, bases de datos, operaciones administrativas locales, dependencias descargadas ni resultados de compilacion. Configurar LDAP, certificados y permisos en cada instalacion.
+Compilacion: Windows x64 y SDK .NET 10. Los instaladores y ZIP se generan en `dist` y no se versionan. No se incluyen certificados, credenciales ni datos de instalaciones.
