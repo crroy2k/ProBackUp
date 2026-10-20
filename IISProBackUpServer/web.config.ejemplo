@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers><add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" /></handlers>
+      <aspNetCore processPath=".\ProBackUp.Server.exe" hostingModel="inprocess" stdoutLogEnabled="false" startupTimeLimit="120">
+        <environmentVariables>
+          <environmentVariable name="PROBACKUP_HOSTING" value="IIS" />
+          <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+        </environmentVariables>
+      </aspNetCore>
+      <directoryBrowse enabled="false" />
+      <httpErrors existingResponse="PassThrough" />
+      <security><requestFiltering><requestLimits maxAllowedContentLength="1048576" /></requestFiltering></security>
+    </system.webServer>
+  </location>
+</configuration>

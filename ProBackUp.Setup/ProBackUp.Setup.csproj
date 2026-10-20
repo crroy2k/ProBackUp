@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>ProBackUp-Setup</AssemblyName><Version>3.3.1</Version><ApplicationManifest>setup.manifest</ApplicationManifest><ApplicationIcon>../ProBackUp.App/app.ico</ApplicationIcon></PropertyGroup>
+  <ItemGroup><PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0"/><EmbeddedResource Include="../assets/probackup-logo.png" LogicalName="logo.png"/><EmbeddedResource Include="../ProBackUp.App/app.ico" LogicalName="app.ico"/></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="payload.zip" LogicalName="payload.zip"/><EmbeddedResource Include="payload.sha256" LogicalName="payload.sha256"/><Compile Include="../ProBackUp.App/Appearance.cs" Link="Appearance.cs"/></ItemGroup>
+</Project>
+
+
+
+

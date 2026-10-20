@@ -1,0 +1,47 @@
+**/bin/
+**/obj/
+ProBackUp.Setup/payload.zip
+ProBackUp.Setup/payload.sha256
+artifacts/
+dist/
+
+_archivo/
+
+# Referencias, herramientas y operaciones locales
+rea/
+referencias/
+ops/
+.session-check-path
+# Publicaciones regeneradas por build-iis.ps1
+IISProBackUpServer/sitio/
+IISProBackUpServer/Backend/
+IISProBackUpServer/SHA256SUMS.txt
+# Certificados, claves, credenciales y datos de instalacion
+**/Certificados/
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+*.crl
+*.req
+*.rsp
+server.json
+settings.json
+settings.json.bak
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+central-outbox/
+# Resultados y capturas locales
+docs/*-results.txt
+docs/*-validation.txt
+docs/*-test-results.txt
+docs/server-dependencies.txt
+docs/fbackup-pe-resources.json
+docs/previews/
+*.log
+
+IISProBackUpServer/LICENSE.txt
+IISProBackUpServer/THIRD-PARTY-NOTICES.txt
