@@ -22,6 +22,7 @@ public static class BackupEngine
         if (!Path.IsPathFullyQualified(job.Destination)) throw new ArgumentException("El destino debe ser una ruta absoluta o UNC.");
         NetworkAccess.ValidateJob(job);
         if (job.RetentionDays < 0 || job.StorageLimitBytes < 0) throw new ArgumentException("La retención y el límite no pueden ser negativos.");
+        if (job.LimitUploadSpeed && (job.MaxUploadMbps < 0.1m || job.MaxUploadMbps > 100000)) throw new ArgumentException("La velocidad máxima debe estar entre 0,10 y 100000 Mbps, o desactiva el límite de subida.");
         foreach (var source in job.Sources)
         {
             if (!Path.IsPathFullyQualified(source)) throw new ArgumentException("El origen debe ser una ruta absoluta o UNC.");
@@ -84,6 +85,7 @@ public static class BackupEngine
         Validate(job);
         NoLinks(job.Destination);
         if (job.Incremental) return await IncrementalStore.Create(job, progress, cancel);
+        var bandwidth = new UploadBandwidth(job);
         Directory.CreateDirectory(job.Destination);
         NoLinks(job.Destination);
         var id = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8];
@@ -102,11 +104,11 @@ public static class BackupEngine
             {
                 var source = Path.GetFullPath(job.Sources[i]);
                 var prefix = $"{i + 1:D2}-" + (Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : "Unidad").Replace(':', '_');
-                if (File.Exists(source)) await Copy(source, prefix, data, manifest, progress, cancel);
-                else await CopyTree(source, prefix, data, manifest, progress, cancel);
+                if (File.Exists(source)) await Copy(source, prefix, data, manifest, progress, cancel, bandwidth);
+                else await CopyTree(source, prefix, data, manifest, progress, cancel, bandwidth);
             }
             manifest.ChangedFiles = manifest.Files.Count;
-            Store.Write(Path.Combine(staging, ManifestName), manifest);
+            await bandwidth.WriteManifest(Path.Combine(staging, ManifestName), manifest, cancel);
             cancel.ThrowIfCancellationRequested();
             if (job.Zip)
             {
@@ -114,7 +116,8 @@ public static class BackupEngine
                 try
                 {
                     progress?.Report("Comprimiendo y verificando el respaldo…");
-                    await Task.Run(() => ZipFile.CreateFromDirectory(staging, zipTemp, CompressionLevel.Optimal, false), cancel);
+                    if (bandwidth.Enabled) await Task.Run(() => CreateZip(staging, zipTemp, bandwidth, cancel), cancel);
+                    else await Task.Run(() => ZipFile.CreateFromDirectory(staging, zipTemp, CompressionLevel.Optimal, false), cancel);
                     await VerifyZip(zipTemp, manifest, cancel);
                     File.Move(zipTemp, final);
                 }
@@ -130,7 +133,23 @@ public static class BackupEngine
         }
         finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
     }
-    private static async Task CopyTree(string source, string relative, string data, BackupManifest manifest, IProgress<string>? progress, CancellationToken cancel)
+    private static async Task CreateZip(string directory, string target, UploadBandwidth bandwidth, CancellationToken token)
+    {
+        await using var output = bandwidth.Open(target, token);
+        using (var zip = new ZipArchive(output, ZipArchiveMode.Create, true))
+        {
+            foreach (var folder in Directory.EnumerateDirectories(directory, "*", SearchOption.AllDirectories))
+            { token.ThrowIfCancellationRequested(); if (!Directory.EnumerateFileSystemEntries(folder).Any()) zip.CreateEntry(Path.GetRelativePath(directory, folder).Replace('\\', '/') + "/"); }
+            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            {
+                token.ThrowIfCancellationRequested(); NoLinks(file);
+                var entry = zip.CreateEntry(Path.GetRelativePath(directory, file).Replace('\\', '/'), CompressionLevel.Optimal);
+                await using var input = File.OpenRead(file); await using var entryStream = entry.Open(); await input.CopyToAsync(entryStream, token);
+            }
+        }
+        await output.FlushAsync(token);
+    }
+    private static async Task CopyTree(string source, string relative, string data, BackupManifest manifest, IProgress<string>? progress, CancellationToken cancel, UploadBandwidth bandwidth)
     {
         cancel.ThrowIfCancellationRequested(); NoLinks(source);
         Directory.CreateDirectory(Path.Combine(data, relative)); manifest.Directories.Add(relative.Replace('\\', '/'));
@@ -138,11 +157,11 @@ public static class BackupEngine
         {
             cancel.ThrowIfCancellationRequested(); NoLinks(entry);
             var rel = Path.Combine(relative, Path.GetFileName(entry));
-            if (Directory.Exists(entry)) await CopyTree(entry, rel, data, manifest, progress, cancel);
-            else await Copy(entry, rel, data, manifest, progress, cancel);
+            if (Directory.Exists(entry)) await CopyTree(entry, rel, data, manifest, progress, cancel, bandwidth);
+            else await Copy(entry, rel, data, manifest, progress, cancel, bandwidth);
         }
     }
-    private static async Task Copy(string source, string relative, string data, BackupManifest manifest, IProgress<string>? progress, CancellationToken cancel)
+    private static async Task Copy(string source, string relative, string data, BackupManifest manifest, IProgress<string>? progress, CancellationToken cancel, UploadBandwidth bandwidth)
     {
         cancel.ThrowIfCancellationRequested(); NoLinks(source);
         progress?.Report("Copiando: " + source);
@@ -150,7 +169,7 @@ public static class BackupEngine
         var target = Path.Combine(data, relative); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 131072, FileOptions.Asynchronous | FileOptions.SequentialScan))
-        await using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, FileOptions.Asynchronous))
+        await using (var output = bandwidth.Open(target, cancel))
         {
             var buffer = new byte[131072]; int read;
             while ((read = await input.ReadAsync(buffer, cancel)) > 0) { hash.AppendData(buffer, 0, read); await output.WriteAsync(buffer.AsMemory(0, read), cancel); }

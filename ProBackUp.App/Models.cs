@@ -18,6 +18,8 @@ public sealed class BackupJob
     public int RetentionDays { get; set; }
     public bool CleanWhenFull { get; set; } = true;
     public long StorageLimitBytes { get; set; }
+    public bool LimitUploadSpeed { get; set; }
+    public decimal MaxUploadMbps { get; set; } = 10;
     public List<DayOfWeek> Days { get; set; } = [];
     public List<string> Times { get; set; } = [];
     public bool RunMissed { get; set; } = true;

@@ -112,6 +112,7 @@ public static class SelfTests
             await RemoteControlTests.Run(root, Assert);
             await UserSessionTests.Run(root, Assert);
             await ClientUpdateTests.Run(root, Assert);
+            await UploadBandwidthTests.Run(root, Assert);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(report))!); await File.WriteAllTextAsync(report, string.Join(Environment.NewLine, results) + Environment.NewLine + "ALL TESTS PASSED");
         }
         finally { Store.Root = oldRoot; if (Directory.Exists(root)) Directory.Delete(root, true); }

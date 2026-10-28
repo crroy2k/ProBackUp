@@ -8,6 +8,7 @@ public static class IncrementalStore
     public static async Task<(string path, BackupManifest manifest)> Create(BackupJob job, IProgress<string>? progress, CancellationToken token)
     {
         if (!Guid.TryParseExact(job.Id, "N", out _)) throw new ArgumentException("ID de tarea inválido.");
+        var bandwidth = new UploadBandwidth(job);
         var repository = Path.Combine(job.Destination, "ProBackUp-Incremental", job.Id);
         BackupEngine.NoLinks(repository); Directory.CreateDirectory(repository);
         var objects = Path.Combine(repository, "objects"); BackupEngine.NoLinks(objects); Directory.CreateDirectory(objects);
@@ -38,7 +39,7 @@ public static class IncrementalStore
                 {
                     await StoragePolicy.EnsureCapacity(job, repository, manifest, length, progress, token);
                     input.Position = 0;
-                    await using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, FileOptions.Asynchronous)) await input.CopyToAsync(output, token);
+                    await using (var output = bandwidth.Open(temp, token)) await input.CopyToAsync(output, token);
                     await using (var verify = File.OpenRead(temp)) await BackupEngine.Check(verify, entry, token);
                     File.Move(temp, obj); manifest.NewDataBytes += length;
                 }
@@ -63,7 +64,7 @@ public static class IncrementalStore
         await StoragePolicy.EnsureCapacity(job, repository, manifest, manifestBytes, progress, token);
         var day = Path.Combine(repository, "versions", DateTime.Now.ToString("yyyy-MM-dd")); BackupEngine.NoLinks(day); Directory.CreateDirectory(day);
         var final = Path.Combine(day, DateTime.Now.ToString("HHmmss-fffffff") + "-" + Guid.NewGuid().ToString("N")[..8] + ".pbi");
-        Store.Write(final, manifest);
+        await bandwidth.WriteManifest(final, manifest, token);
         return (final, manifest);
     }
     internal static string ObjectPath(string repository, FileEntry file)
