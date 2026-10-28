@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -19,6 +19,7 @@ internal static class Program
         try
         {
             if (args.Length == 3 && args[0] == "--self-test") { SelfTest(args[1], args[2]); return 0; }
+            if (args.SequenceEqual(["--repair-service"])) { ServiceSetup.Configure(InstallPath); MessageBox.Show("Servicio reparado. La interfaz y los respaldos usan la cuenta del usuario del escritorio.", "ProBackUp"); return 0; }
             if (args.SequenceEqual(["--uninstall"])) { Uninstall(); return 0; }
             if (args.Length > 0) throw new ArgumentException("Argumentos no reconocidos.");
             Application.Run(new InstallerForm()); return 0;
@@ -63,7 +64,7 @@ internal static class Program
             }
             if (!File.Exists(Path.Combine(stage, "ProBackUp.exe"))) throw new IOException("Falta ProBackUp.exe.");
             File.Copy(test ? testInstaller ?? throw new ArgumentException("Falta el instalador de prueba.") : Environment.ProcessPath!, Path.Combine(stage, "Uninstall.exe"));
-            File.WriteAllText(Path.Combine(stage, ".probackup-install.json"), JsonSerializer.Serialize(new { product = "ProBackUp", version = "3.3.1", path = Path.GetFullPath(target) }));
+            File.WriteAllText(Path.Combine(stage, ".probackup-install.json"), JsonSerializer.Serialize(new { product = "ProBackUp", version = "3.4.0", path = Path.GetFullPath(target) }));
             // Fail before touching an existing installation if a binary is in use.
             foreach (var name in OwnedFiles)
             {
@@ -119,7 +120,7 @@ internal static class Program
     public static void Register(string target, bool desktop)
     {
         using var registry = Registry.LocalMachine.CreateSubKey(RegistryPath);
-        registry.SetValue("DisplayName", "ProBackUp"); registry.SetValue("DisplayVersion", "3.3.1"); registry.SetValue("Publisher", "ProBackUp"); registry.SetValue("InstallLocation", target); registry.SetValue("DisplayIcon", Path.Combine(target, "ProBackUp.exe")); registry.SetValue("UninstallString", $"\"{Path.Combine(target, "Uninstall.exe")}\" --uninstall"); registry.SetValue("NoModify", 1, RegistryValueKind.DWord); registry.SetValue("NoRepair", 1, RegistryValueKind.DWord); registry.SetValue("EstimatedSize", (int)(OwnedFiles.Where(n => File.Exists(Path.Combine(target, n))).Sum(n => new FileInfo(Path.Combine(target, n)).Length) / 1024), RegistryValueKind.DWord);
+        registry.SetValue("DisplayName", "ProBackUp"); registry.SetValue("DisplayVersion", "3.4.0"); registry.SetValue("Publisher", "ProBackUp"); registry.SetValue("InstallLocation", target); registry.SetValue("DisplayIcon", Path.Combine(target, "ProBackUp.exe")); registry.SetValue("UninstallString", $"\"{Path.Combine(target, "Uninstall.exe")}\" --uninstall"); registry.SetValue("NoModify", 1, RegistryValueKind.DWord); registry.SetValue("NoRepair", 1, RegistryValueKind.DWord); registry.SetValue("EstimatedSize", (int)(OwnedFiles.Where(n => File.Exists(Path.Combine(target, n))).Sum(n => new FileInfo(Path.Combine(target, n)).Length) / 1024), RegistryValueKind.DWord);
         Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ProBackUp", "ProBackUp.lnk"), Path.Combine(target, "ProBackUp.exe"));
         Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ProBackUp", "Desinstalar ProBackUp.lnk"), Path.Combine(target, "Uninstall.exe"));
         // The uninstaller shortcut must carry its mode argument.
@@ -151,6 +152,7 @@ internal static class Program
         var root = Path.Combine(Path.GetTempPath(), "ProBackUp-setup-test-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root); var target = Path.Combine(root, "installed"); var results = new List<string>();
         try
         {
+            ServiceSetup.TestDataAcl(root); results.Add("PASS: Datos permiten escritura al usuario sin elevarse y no conceden acceso a otros usuarios de Windows");
             Install(target, false, true, installer); if (!ValidMarker(target) || !OwnedFiles.All(n => File.Exists(Path.Combine(target, n)))) throw new Exception("Instalación incompleta."); results.Add("PASS: Extrae payload verificado, aplicación, licencia y desinstalador");
             using (var original = File.OpenRead(installer)) using (var copied = File.OpenRead(Path.Combine(target, "Uninstall.exe"))) if (!SHA256.HashData(original).SequenceEqual(SHA256.HashData(copied))) throw new Exception("El desinstalador no coincide con el instalador autónomo.");
             Install(target, false, true, installer); results.Add("PASS: Actualización idempotente de instalación propia");
@@ -172,7 +174,7 @@ internal sealed class InstallerForm : Form
     private bool busy;
     public InstallerForm()
     {
-        Text = "Instalar ProBackUp 3.3"; Size = new Size(740, 610); MinimumSize = new Size(700, 610); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); BackColor = Color.White; AutoScaleMode = AutoScaleMode.Dpi;
+        Text = "Instalar ProBackUp 3.4"; Size = new Size(740, 610); MinimumSize = new Size(700, 610); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); BackColor = Color.White; AutoScaleMode = AutoScaleMode.Dpi;
         var iconResource = Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico"); if (iconResource != null) Icon = new Icon(iconResource);
         var table = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(32), ColumnCount = 1, RowCount = 10 }; table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 10; i++) table.RowStyles.Add(new RowStyle(i == 8 ? SizeType.Percent : SizeType.AutoSize, i == 8 ? 100 : 0));
         var brand = new Panel { Dock = DockStyle.Top, Height = 82 }; var logoStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("logo.png");
@@ -181,11 +183,11 @@ internal sealed class InstallerForm : Form
         table.Controls.Add(new Label { Text = "Protege tus archivos. Mantente informado.", Font = new Font("Segoe UI", 14), AutoSize = true, Margin = new Padding(0, 0, 0, 24) }, 0, 1);
         table.Controls.Add(new Label { Text = "• Respaldos completos, incrementales y versiones por día\r\n• Servicio automático con días y múltiples horarios\r\n• Historial y restauración con verificación SHA-256\r\n• Notificaciones SMTP con puertos y TLS configurables", AutoSize = true, Margin = new Padding(0, 0, 0, 22) }, 0, 2);
         table.Controls.Add(new Label { Text = "Destino: " + Program.InstallPath, AutoSize = true, MaximumSize = new Size(630, 0), Margin = new Padding(0, 0, 0, 16) }, 0, 3); table.Controls.Add(desktop, 0, 4); table.Controls.Add(launch, 0, 5);
-        table.Controls.Add(new Label { Text = "Windows 10/11 de 64 bits · Incluye el entorno de ejecución.\r\nInstala e inicia ProBackUpService automáticamente. La configuración queda protegida para administradores y el servicio.", AutoSize = true, MaximumSize = new Size(630, 0), ForeColor = Color.DimGray, Margin = new Padding(0, 18, 0, 12) }, 0, 6); table.Controls.Add(status, 0, 7); table.Controls.Add(install, 0, 9); Controls.Add(table);
+        table.Controls.Add(new Label { Text = "Windows 10/11 de 64 bits · Incluye el entorno de ejecución.\r\nInstala desde la sesión del usuario que realizará los respaldos. Solo la instalación y la reparación del servicio requieren administrador.", AutoSize = true, MaximumSize = new Size(630, 0), ForeColor = Color.DimGray, Margin = new Padding(0, 18, 0, 12) }, 0, 6); table.Controls.Add(status, 0, 7); table.Controls.Add(install, 0, 9); Controls.Add(table);
         install.Click += async (_, _) =>
         {
             busy = true; install.Enabled = false; desktop.Enabled = false; launch.Enabled = false; status.Text = "Verificando e instalando…";
-            try { bool shortcut = desktop.Checked; await Task.Run(() => Program.Install(Program.InstallPath, shortcut)); status.Text = "Instalación completada"; if (launch.Checked) Process.Start(new ProcessStartInfo(Path.Combine(Program.InstallPath, "ProBackUp.exe")) { UseShellExecute = true }); busy = false; Close(); }
+            try { bool shortcut = desktop.Checked; await Task.Run(() => Program.Install(Program.InstallPath, shortcut)); status.Text = "Instalación completada"; if (launch.Checked) ProBackUp.Installation.ClientInstallation.LaunchDesktop(Path.Combine(Program.InstallPath, "ProBackUp.exe")); busy = false; Close(); }
             catch (Exception ex) { busy = false; status.Text = "No se completó la instalación"; MessageBox.Show(this, ex.Message + "\r\nCierra ProBackUp antes de actualizar.", "ProBackUp", MessageBoxButtons.OK, MessageBoxIcon.Error); install.Enabled = true; desktop.Enabled = true; launch.Enabled = true; }
         };
         FormClosing += (_, e) => { if (busy) e.Cancel = true; };

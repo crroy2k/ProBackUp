@@ -13,3 +13,5 @@ Windows x64 y SDK .NET 10. Ejecuta en PowerShell:
 Los ejecutables y paquetes se generan en `dist/` y no estan versionados.
 
 Las ramas `cliente`, `server` e `iis` contienen unicamente su componente y sus dependencias. `main` conserva el proyecto integrado. No se incluyen certificados, credenciales ni datos locales.
+
+Cliente 3.4.0: interfaz sin elevacion, tareas con la sesion del usuario y actualizaciones desde GitHub Releases. Consulta [instalacion y actualizaciones](docs/cliente-actualizaciones.md).

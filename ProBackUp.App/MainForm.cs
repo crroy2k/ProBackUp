@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace ProBackUp;
 public sealed class MainForm : Form
@@ -154,6 +154,16 @@ public sealed class MainForm : Form
         toolbar.Controls.Add(Action("Guardar configuración", (_, _) => Guard(() => { using var gate = Store.Acquire(); var next = ReadMail(); if (removePassword.Checked) next.SetPassword(""); if (next.Enabled) MailService.Validate(next); var updated = Store.Load(); updated.Mail = next; Store.Save(updated); settings = updated; password.Clear(); removePassword.Checked = false; RefreshAll(); status.Text = "Configuración guardada"; }), true));
         toolbar.Controls.Add(Action("Enviar correo de prueba", async (_, _) => await Busy(async token => { var mail = ReadMail(); MailService.Validate(mail); using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(mail.TimeoutSeconds)); try { await MailService.Send(mail, "ProBackUp · correo de prueba", "La configuración SMTP funciona. Este correo de prueba fue solicitado desde ProBackUp.", deadline.Token); } catch (Exception ex) { throw new IOException(MailService.SafeError(ex, mail)); } Info("Correo de prueba enviado al servidor SMTP. Revisa la bandeja de entrada o spam."); })));
         toolbar.Controls.Add(Action("Servidor central…", (_, _) => { using var dialog = new CentralDialog(settings.DarkMode); dialog.ShowDialog(this); settings = Store.Load(); }));
+        toolbar.Controls.Add(Action("Buscar actualizaciones", async (_, _) => await UpdateClient()));
+        toolbar.Controls.Add(Action("Reparar servicio (administrador)…", async (_, _) => await Busy(async token =>
+        {
+            var setup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ProBackUp", "Uninstall.exe");
+            if (!File.Exists(setup)) throw new IOException("Ejecuta el instalador de ProBackUp para instalar el servicio.");
+            using var process = Process.Start(new ProcessStartInfo(setup) { UseShellExecute = true, Verb = "runas", Arguments = "--repair-service" })!;
+            await process.WaitForExitAsync(token);
+            if (process.ExitCode != 0) throw new IOException("No se pudo reparar el servicio. Contacte a T.I. Ext. 233.");
+            status.Text = Scheduler.Status();
+        })));
         toolbar.Controls.Add(Action("Abrir carpeta de datos", (_, _) => Guard(() => { Directory.CreateDirectory(Store.Root); Process.Start(new ProcessStartInfo(Store.Root) { UseShellExecute = true }); }))); page.Controls.Add(toolbar, 0, 3);
     }
     private static void Field(TableLayoutPanel table, int row, int col, string caption, Control control)
@@ -165,6 +175,24 @@ public sealed class MainForm : Form
     {
         var m = settings.Mail; enabled.Checked = m.Enabled; host.Text = m.Host; port.Value = Math.Clamp(m.Port, 1, 65535); startTls.Checked = m.Security == "STARTTLS"; sslTls.Checked = m.Security == "SSL/TLS"; noTls.Checked = m.Security == "Sin TLS"; user.Text = m.User; from.Text = m.From; recipients.Text = m.Recipients;
         timeout.Value = Math.Clamp(m.TimeoutSeconds, 5, 120); success.Checked = m.OnSuccess; failure.Checked = m.OnFailure;
+    }
+    private async Task UpdateClient()
+    {
+        string? installer = null;
+        await Busy(async token =>
+        {
+            status.Text = "Buscando una versión del cliente en GitHub…";
+            using var client = ClientUpdates.Client(); var release = await ClientUpdates.Latest(client, token);
+            if (release == null) { Info("Todavía no hay una versión estable del cliente publicada en GitHub Releases."); return; }
+            if (release.Version <= ClientUpdates.Current) { Info("ProBackUp está actualizado. Versión instalada: " + ClientUpdates.Current.ToString(3)); return; }
+            if (MessageBox.Show(this, $"Está disponible ProBackUp {release.Version}. ¿Descargar la actualización?", "Actualizar ProBackUp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            var cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProBackUp", "updates");
+            var downloaded = await ClientUpdates.Download(client, release, cache, Progress(), token);
+            if (MessageBox.Show(this, "Instalador descargado y verificado. ¿Instalar ahora? ProBackUp se cerrará y Windows pedirá permisos de administrador para actualizar la aplicación y el servicio.", "Instalar actualización", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) installer = downloaded;
+            else status.Text = "Actualización descargada: " + downloaded;
+        });
+        if (installer == null) return;
+        Guard(() => { using var process = ClientUpdates.StartInstaller(installer); exiting = true; Close(); });
     }
     private MailSettings ReadMail()
     {

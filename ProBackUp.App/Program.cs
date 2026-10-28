@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace ProBackUp;
 internal static class Program
@@ -6,7 +6,7 @@ internal static class Program
     [STAThread]
     static int Main(string[] args)
     {
-        if (args.SequenceEqual(["--service"])) { MachineStorage.Initialize(); System.ServiceProcess.ServiceBase.Run(new BackupService()); return 0; }
+        if (args.SequenceEqual(["--service"])) { System.ServiceProcess.ServiceBase.Run(new BackupService()); return 0; }
         if (args.Length == 2 && args[0] == "--session-probe") return SessionProbe.Run(args[1]).GetAwaiter().GetResult();
         ApplicationConfiguration.Initialize();
         try
@@ -27,10 +27,12 @@ internal static class Program
                 var result = BackupEngine.Run(job, settings.Mail).GetAwaiter().GetResult(); return result.Status == "Correcto" ? 0 : 1;
             }
             if (args.Length > 0) throw new ArgumentException("Argumentos no reconocidos.");
-            if (!new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent()).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
+            if (ProBackUp.Installation.ClientInstallation.Elevated)
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas" }); return 0;
+                ProBackUp.Installation.ClientInstallation.LaunchDesktop(Environment.ProcessPath!); return 0;
             }
+            using (var current = System.Security.Principal.WindowsIdentity.GetCurrent())
+                if (ProBackUp.Installation.ClientInstallation.OwnerSid != current.User?.Value) throw new IOException("Este cliente debe instalarse o repararse desde la sesión del usuario que realizará los respaldos. Contacte a T.I. Ext. 233.");
             MachineStorage.Initialize();
             var identity = System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
             using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\ProBackUp-Activate-" + identity);

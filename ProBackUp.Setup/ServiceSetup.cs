@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.ServiceProcess;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -49,11 +49,46 @@ internal static class ServiceSetup
         catch { if (!existed && Exists()) { Stop(target); Command("delete", Name); } throw; }
     }
     public static void Remove(string target) { Stop(target); if (Exists()) Command("delete", Name); }
+    private static void Grant(string path, string ownerSid)
+    {
+        Program.CheckPath(path);
+        if (File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Los datos no admiten enlaces: " + path);
+        if (Directory.Exists(path))
+        {
+            var info = new DirectoryInfo(path); var access = info.GetAccessControl(); access.SetAccessRuleProtection(false, false); info.SetAccessControl(access);
+            foreach (var child in Directory.EnumerateFileSystemEntries(path)) Grant(child, ownerSid);
+        }
+        else { var info = new FileInfo(path); var access = info.GetAccessControl(); access.SetAccessRuleProtection(false, false); info.SetAccessControl(access); }
+    }
     private static void PrepareData()
     {
         var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ProBackUp"); Program.CheckPath(target);
-        var directory = new DirectoryInfo(target); directory.Create(); var acl = new DirectorySecurity(); acl.SetAccessRuleProtection(true, false);
-        foreach (var sid in new[] { "S-1-5-18", "S-1-5-32-544" }) acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid), FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-        directory.SetAccessControl(acl);
+        var directory = new DirectoryInfo(target); directory.Create();
+        var ownerSid = ProBackUp.Installation.ClientInstallation.DesktopSid();
+        using var registration = Registry.LocalMachine.CreateSubKey(ProBackUp.Installation.ClientInstallation.RegistryPath);
+        var existingOwner = registration.GetValue("OwnerSid") as string;
+        if (!string.IsNullOrEmpty(existingOwner) && existingOwner != ownerSid) throw new IOException("Este cliente pertenece a otro usuario. Ejecuta la actualización desde la sesión del propietario de los respaldos.");
+        directory.SetAccessControl(DataAcl(new SecurityIdentifier(ownerSid)));
+        // Existing protected files must also become writable by the desktop owner.
+        foreach (var path in Directory.EnumerateFileSystemEntries(target)) Grant(path, ownerSid);
+        registration.SetValue("OwnerSid", ownerSid, RegistryValueKind.String);
+    }
+    private static DirectorySecurity DataAcl(SecurityIdentifier sid)
+    {
+        var acl = new DirectorySecurity(); acl.SetAccessRuleProtection(true, false);
+        foreach (var principal in new[] { "S-1-5-18", "S-1-5-32-544" }) acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(principal), FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        acl.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.Modify | FileSystemRights.Synchronize, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        return acl;
+    }
+    internal static void TestDataAcl(string directory)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var path = Path.Combine(directory, "user-data-acl"); Directory.CreateDirectory(path);
+        new DirectoryInfo(path).SetAccessControl(DataAcl(identity.User!));
+        File.WriteAllText(Path.Combine(path, "settings-check.txt"), "usuario sin elevación");
+        var rules = new DirectoryInfo(path).GetAccessControl().GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().ToList();
+        if (rules.Count != 3 || rules.Any(r => r.IdentityReference.Value is "S-1-1-0" or "S-1-5-11" or "S-1-5-32-545")) throw new IOException("Permisos de datos demasiado amplios.");
+        if (File.ReadAllText(Path.Combine(path, "settings-check.txt")) != "usuario sin elevación") throw new IOException("El usuario no puede leer su configuración.");
+        File.Delete(Path.Combine(path, "settings-check.txt")); Directory.Delete(path);
     }
 }

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.ServiceProcess;
 namespace ProBackUp;
 public static class Scheduler
@@ -56,6 +56,26 @@ public sealed class BackupService : ServiceBase
     protected override void OnStart(string[] args) { stop = new(); loop = Task.Run(() => Work(stop.Token)); }
     protected override void OnStop() { stop?.Cancel(); RequestAdditionalTime(30000); try { loop?.Wait(TimeSpan.FromSeconds(25)); } catch { } }
     public static async Task Work(CancellationToken token)
+    {
+        // Wait for the assigned desktop owner. All configuration, history, and backup
+        // I/O runs with this user token, including service metadata and remote orders.
+        while (!token.IsCancellationRequested)
+        {
+            var sid = ProBackUp.Installation.ClientInstallation.OwnerSid;
+            try
+            {
+                using var identity = UserSession.Acquire(new NetworkSettings { Mode = "Session", UserSid = sid, User = sid });
+                UserSession.MetadataToken.Value = identity;
+                try { await System.Security.Principal.WindowsIdentity.RunImpersonatedAsync(identity, async () => { MachineStorage.Initialize(); await WorkAsUser(token); }); }
+                finally { UserSession.MetadataToken.Value = null; }
+                return;
+            }
+            catch (UserSessionUnavailableException) { }
+            catch (UnauthorizedAccessException) { }
+            await Task.Delay(TimeSpan.FromSeconds(10), token);
+        }
+    }
+    internal static async Task WorkAsUser(CancellationToken token)
     {
         var reporting = CentralReporter.Work(token);
         var remote = RemoteControl.Work(token);

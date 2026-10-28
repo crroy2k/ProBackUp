@@ -1,4 +1,4 @@
-ProBackUp 3.3.1 — Windows 10/11 x64
+﻿ProBackUp 3.4.0 — Windows 10/11 x64
 
 BUSCADOR Y FILTROS POR DÍA
 En Versiones de archivos, elige el día y la hora. Buscar archivo encuentra nombres
@@ -37,8 +37,8 @@ INSTALAR Y ACTUALIZAR
 Abre ProBackUp-Setup.exe y acepta el aviso de administrador de Windows.
 Se instala en C:\Program Files\ProBackUp e instala/inicia ProBackUpService
 como LocalSystem con arranque automático y recuperación ante fallos.
-El equipo debe estar encendido; no es necesario abrir ProBackUp ni iniciar sesión.
-La interfaz de administración también solicita elevación para proteger las claves.
+El equipo debe estar encendido y el usuario debe tener sesión iniciada; puede estar bloqueada.
+La interfaz abre sin elevación con el usuario del escritorio. Solo instalar o reparar el servicio pide administrador.
 El servicio no puede operar si el equipo está apagado o suspendido.
 Incluye .NET. Desinstala desde Configuración > Aplicaciones > ProBackUp.
 La desinstalación retira el servicio y conserva configuración, historial y respaldos.
@@ -56,8 +56,8 @@ El modo claro/oscuro se cambia en la esquina superior derecha y se recuerda.
 
 DESTINOS DE RED Y CREDENCIALES
 Usa \\servidor\compartida\Respaldos. Las unidades de red mapeadas se convierten
-a UNC al elegirlas, siempre que estén disponibles en la sesión de administración.
-Si la unidad no aparece al elevar la aplicación, escribe directamente su ruta UNC.
+a UNC al elegirlas, siempre que estén disponibles en la sesión del usuario.
+Instala desde la sesión del usuario que hará los respaldos, aunque UAC use otra cuenta.
 La tarea usa la sesión iniciada del usuario indicado como DOMINIO\usuario.
 No se solicita ni guarda su contraseña de Windows. El servicio LocalSystem obtiene
 el token de esa sesión y accede a los datos con sus permisos, sin ampliarlos.
@@ -183,5 +183,10 @@ El servicio no necesita la ventana de ProBackUp abierta. Al iniciar sesión recu
 Las órdenes remotas recogidas sin sesión disponible quedan en Esperando sesión y no caducan mientras esperan. Una orden de una tarea cuyo usuario esté ausente no bloquea a los demás usuarios. Las órdenes aún no recogidas por un equipo desconectado conservan el límite de 24 horas.
 
 
-CORRECCIÓN UAC (3.3.1)
+CORRECCIÓN UAC (3.4.0)
 Corrige el error Windows 1346 al ejecutar la interfaz como administrador. El acceso a datos usa el token del escritorio normal del mismo usuario y sesión, sin depender de un token vinculado de UAC que solo permita identificación. No usa el token elevado como alternativa ni cambia permisos. El servicio mantiene su acceso mediante WTS a la sesión del dueño.
+
+ACTUALIZACIONES DEL CLIENTE
+Configuración > Buscar actualizaciones consulta GitHub Releases en crroy2k/ProBackUp.
+Descarga el instalador, comprueba SHA-256 y solicita confirmación para instalar con UAC.
+El servicio y la interfaz usan la cuenta del usuario asignado en la instalación.

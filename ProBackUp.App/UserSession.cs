@@ -1,4 +1,4 @@
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -90,7 +90,20 @@ internal static class UserSession
             return DuplicateSource(source);
         }
     }
+    internal static readonly AsyncLocal<SafeAccessTokenHandle?> MetadataToken = new();
+    internal static bool AuthorizedSession(string owner, NetworkSettings network) => owner.Length > 0 && network.Mode == "Session" && network.UserSid == owner;
+    internal static bool ServiceProcess => WindowsIdentity.RunImpersonated(SafeAccessTokenHandle.InvalidHandle, () => { using var identity = WindowsIdentity.GetCurrent(); return identity.IsSystem; });
     internal static SafeAccessTokenHandle Acquire(NetworkSettings network)
+    {
+        if (ServiceProcess)
+        {
+            var owner = ProBackUp.Installation.ClientInstallation.OwnerSid;
+            if (!AuthorizedSession(owner, network)) throw new UnauthorizedAccessException("La tarea debe usar la sesión del usuario autorizado durante la instalación.");
+            return WindowsIdentity.RunImpersonated(SafeAccessTokenHandle.InvalidHandle, () => AcquireCore(network));
+        }
+        return AcquireCore(network);
+    }
+    private static SafeAccessTokenHandle AcquireCore(NetworkSettings network)
     {
         if (network.Mode != "Session") throw new ArgumentException("La tarea no usa sesión de usuario.");
         if (network.UserSid.Length == 0 && !network.User.Contains('\\')) throw new ArgumentException("Indica el usuario de la tarea como DOMINIO\\usuario.");
@@ -138,8 +151,8 @@ internal static class UserSession
         if (stored?.Network.Mode == "Session" && stored.Network.User.Equals(job.Network.User, StringComparison.OrdinalIgnoreCase) && stored.Network.UserSid.Length == 0)
         { stored.Network.UserSid = sid; Store.Save(settings); }
     }
-    internal static T AsProcess<T>(Func<T> action) => WindowsIdentity.RunImpersonated(SafeAccessTokenHandle.InvalidHandle, action);
-    internal static void AsProcess(Action action) => WindowsIdentity.RunImpersonated(SafeAccessTokenHandle.InvalidHandle, action);
+    internal static T AsProcess<T>(Func<T> action) => WindowsIdentity.RunImpersonated(MetadataToken.Value ?? SafeAccessTokenHandle.InvalidHandle, action);
+    internal static void AsProcess(Action action) => WindowsIdentity.RunImpersonated(MetadataToken.Value ?? SafeAccessTokenHandle.InvalidHandle, action);
     internal static bool Migrate(AppSettings settings)
     {
         if (settings.SessionExecutionVersion >= 1) return false;
