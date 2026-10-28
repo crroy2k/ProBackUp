@@ -1,4 +1,4 @@
-using System.Security.AccessControl;
+﻿using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Diagnostics;
 namespace ProBackUp;
@@ -7,14 +7,18 @@ public static class MachineStorage
     public static void Initialize()
     {
         var dir = new DirectoryInfo(Store.Root); BackupEngine.NoLinks(dir.FullName); dir.Create();
-        var acl = new DirectorySecurity(); acl.SetAccessRuleProtection(true, false);
-        foreach (var sid in new[] { "S-1-5-18", "S-1-5-32-544" }) acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid), FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-        dir.SetAccessControl(acl);
+        // The elevated installer grants access only to the desktop owner.
+        // Opening the UI never changes ACLs or requests elevation.
         string legacy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProBackUp");
         if (File.Exists(Store.SettingsPath))
         {
-            using var gate = Store.Acquire(); var existing = Store.Load();
-            if (UserSession.Migrate(existing)) { Store.Save(existing); if (File.Exists(Store.SettingsPath + ".bak")) Store.Write(Store.SettingsPath + ".bak", existing); }
+            var existing = Store.Load();
+            var changed = UserSession.Migrate(existing);
+            using var owner = System.Security.Principal.WindowsIdentity.GetCurrent();
+            foreach (var job in existing.Jobs)
+                if (job.Network.Mode == "Session" && job.Network.UserSid.Length == 0 && job.Network.User.Equals(owner.Name, StringComparison.OrdinalIgnoreCase))
+                { job.Network.UserSid = owner.User!.Value; changed = true; }
+            if (changed) { using var gate = Store.Acquire(); Store.Save(existing); if (File.Exists(Store.SettingsPath + ".bak")) Store.Write(Store.SettingsPath + ".bak", existing); }
             return;
         }
         if (!File.Exists(Path.Combine(legacy, "settings.json"))) return;

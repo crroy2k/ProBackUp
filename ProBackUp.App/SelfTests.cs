@@ -93,7 +93,7 @@ public static class SelfTests
             Store.Save(new AppSettings { Jobs = [workerJob] });
             using (var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
             {
-                var worker = BackupService.Work(stop.Token);
+                var worker = BackupService.WorkAsUser(stop.Token);
                 for (int i = 0; i < 100 && !Store.History().Any(r => r.JobId == workerJob.Id && r.Status == "Correcto"); i++) await Task.Delay(100);
                 stop.Cancel(); await worker;
             }
@@ -111,6 +111,7 @@ public static class SelfTests
             await CentralTests.Run(root, Assert);
             await RemoteControlTests.Run(root, Assert);
             await UserSessionTests.Run(root, Assert);
+            await ClientUpdateTests.Run(root, Assert);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(report))!); await File.WriteAllTextAsync(report, string.Join(Environment.NewLine, results) + Environment.NewLine + "ALL TESTS PASSED");
         }
         finally { Store.Root = oldRoot; if (Directory.Exists(root)) Directory.Delete(root, true); }

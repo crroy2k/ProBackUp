@@ -8,6 +8,8 @@ internal static class UserSessionTests
         var previous = Store.Root; Store.Root = Path.Combine(root, "session-tests"); Directory.CreateDirectory(Store.Root);
         try
         {
+            var assigned = new NetworkSettings { Mode = "Session", UserSid = "S-1-5-21-100" };
+            check(UserSession.AuthorizedSession("S-1-5-21-100", assigned) && !UserSession.AuthorizedSession("S-1-5-21-200", assigned) && !UserSession.AuthorizedSession("", assigned) && !UserSession.AuthorizedSession("S-1-5-21-100", new NetworkSettings { Mode = "Service", UserSid = assigned.UserSid }), "Servicio rechaza ejecutar como SYSTEM, otra cuenta o sin propietario registrado por el instalador");
             check(UserSession.Matches(@"DOMINIO\ana", "S-1-5-21-100", @"DOMINIO\ana.renombrada", "S-1-5-21-100") && !UserSession.Matches(@"DOMINIO\ana", "S-1-5-21-100", @"DOMINIO\ana", "S-1-5-21-200"), "La sesión se vincula al SID y nunca se sustituye por otra identidad");
             check(UserSession.Matches(@"DOMINIO\ana", "", @"dominio\ANA", "S-1-5-21-100") && !UserSession.Matches(@"DOMINIO\ana", "", @"OTRO\ana", "S-1-5-21-200") && !UserSession.Matches("ana", "", "ana", ""), "Sin SID solo coincide una cuenta cualificada exacta, no un usuario homónimo");
             using var identity = WindowsIdentity.GetCurrent();

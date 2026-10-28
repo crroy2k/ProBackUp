@@ -1,0 +1,46 @@
+name: Publicar cliente ProBackUp
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ProBackUp.App/**'
+      - 'ProBackUp.Setup/**'
+      - 'ProBackUp.Shared/**'
+      - 'build.ps1'
+      - '.github/workflows/release-client.yml'
+permissions:
+  contents: write
+concurrency:
+  group: release-client
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.x'
+      - name: Compilar instalador
+        shell: pwsh
+        run: ./build.ps1 -SkipTests
+      - name: Publicar instalador y huellas
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content ProBackUp.App/ProBackUp.App.csproj
+          $version = [string]$project.Project.PropertyGroup.Version | Where-Object { $_ }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version de cliente invalida.' }
+          $tag = 'client-v' + $version
+          gh release view $tag --repo $env:RELEASE_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output 'Esta version ya esta publicada; no se reemplazan sus archivos.'; exit 0 }
+          gh release create $tag dist/ProBackUp-Setup.exe dist/SHA256SUMS.txt --repo $env:RELEASE_REPOSITORY --target $env:RELEASE_COMMIT --title "ProBackUp Cliente $version" --notes-file docs/cliente-actualizaciones.md --latest
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo publicar la version del cliente.' }

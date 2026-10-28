@@ -12,9 +12,10 @@ internal static class TrayTests
             {
                 var personal = new NetworkSettings { Mode = "Current", User = @"DOMINIO\otro.usuario" }; personal.SetPassword("clave-ficticia-de-prueba");
                 credentials.LoadSettings(personal); var same = credentials.ReadSettings();
-                Check(same.User == personal.User && same.Mode == "Session" && same.EncryptedPassword.Length == 0, "Editar conserva el usuario guardado y migra a sesión sin contraseña");
+                using var current = System.Security.Principal.WindowsIdentity.GetCurrent();
+                Check(same.User == current.Name && same.UserSid == current.User?.Value && same.Mode == "Session" && same.EncryptedPassword.Length == 0, "Editar tarea usa el usuario conectado y elimina la cuenta administrativa o contraseña anterior");
                 credentials.SuggestPersonalAccount(@"DOMINIO\tercero");
-                Check(credentials.ReadSettings().User == personal.User, "Sugerencia de cuenta no sustituye una identidad explícita ya configurada");
+                Check(credentials.ReadSettings().User == current.Name, "Una sugerencia de cuenta diferente no sustituye al usuario conectado");
             }
             using var activation = new EventWaitHandle(false, EventResetMode.AutoReset);
             using var form = new MainForm(new AppSettings(), activation: activation);

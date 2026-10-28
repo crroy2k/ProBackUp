@@ -1,4 +1,4 @@
-using System.Security.Principal;
+﻿using System.Security.Principal;
 using System.Text.Json;
 namespace ProBackUp;
 
@@ -24,14 +24,14 @@ public sealed class NetworkCredentialsEditor : UserControl
         Field("Cuenta de acceso a la red", mode); Field(sessionOnly ? @"Usuario de la tarea (DOMINIO\usuario)" : @"Usuario (DOMINIO\usuario o usuario@dominio)", user); if (!sessionOnly) Field("Contraseña de Windows / red", password);
         table.Controls.Add(new Label { Text = sessionOnly ? "Se usa la sesión iniciada de este usuario, incluso con la pantalla bloqueada. No se guarda contraseña ni se usa la sesión de otra persona. Si ha cerrado sesión, se espera a que vuelva a iniciar para ejecutar el último respaldo vencido." : "La sesión del usuario guardado no requiere contraseña. Otra cuenta requiere su contraseña de Windows; vacío conserva la clave de la misma cuenta.", AutoSize = true, MaximumSize = new Size(710, 0), Tag = "muted", Margin = new Padding(0, 4, 0, 8) });
         Controls.Add(table);
-        mode.SelectedIndexChanged += (_, _) => { if (sessionOnly) { user.ReadOnly = false; user.Enabled = true; return; } user.ReadOnly = mode.SelectedIndex == 1; user.Enabled = mode.SelectedIndex != 0; password.Enabled = mode.SelectedIndex is 1 or 2; if (!loading && mode.SelectedIndex == 1) user.Text = WindowsIdentity.GetCurrent().Name; };
+        mode.SelectedIndexChanged += (_, _) => { if (sessionOnly) { user.ReadOnly = true; user.Enabled = true; return; } user.ReadOnly = mode.SelectedIndex == 1; user.Enabled = mode.SelectedIndex != 0; password.Enabled = mode.SelectedIndex is 1 or 2; if (!loading && mode.SelectedIndex == 1) user.Text = WindowsIdentity.GetCurrent().Name; };
         LoadSettings(new());
     }
     public void LoadSettings(NetworkSettings settings)
     {
         saved = JsonSerializer.Deserialize<NetworkSettings>(JsonSerializer.Serialize(settings))!;
         loading = true;
-        user.Text = saved.User; password.Clear(); password.PlaceholderText = saved.EncryptedPassword.Length > 0 ? "Contraseña guardada" : "";
+        user.Text = sessionOnly ? WindowsIdentity.GetCurrent().Name : saved.User; password.Clear(); password.PlaceholderText = saved.EncryptedPassword.Length > 0 ? "Contraseña guardada" : "";
         mode.SelectedIndex = sessionOnly ? 0 : saved.Mode == "Current" ? 1 : saved.Mode == "Other" ? 2 : saved.Mode == "Session" ? 3 : 0;
         loading = false;
     }
@@ -48,7 +48,7 @@ public sealed class NetworkCredentialsEditor : UserControl
     {
         if (sessionOnly || mode.SelectedIndex == 3)
         {
-            var account = user.Text.Trim();
+            var account = sessionOnly ? WindowsIdentity.GetCurrent().Name : user.Text.Trim();
             var session = new NetworkSettings { Mode = "Session", User = account, UserSid = account.Equals(saved.User, StringComparison.OrdinalIgnoreCase) && saved.UserSid.Length > 0 ? saved.UserSid : UserSession.Sid(account) };
             NetworkAccess.Validate(session); return session;
         }

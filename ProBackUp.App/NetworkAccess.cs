@@ -1,4 +1,4 @@
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -40,6 +40,7 @@ public static class NetworkAccess
     internal static bool RequiresPersonalCredentials(BackupJob job) => IsNetworkPath(job.Destination) || job.Sources.Any(IsNetworkPath);
     public static void ValidateJob(BackupJob job)
     {
+        if (UserSession.ServiceProcess && !UserSession.AuthorizedSession(ProBackUp.Installation.ClientInstallation.OwnerSid, job.Network)) throw new UnauthorizedAccessException("El servicio solo ejecuta tareas con la sesión del usuario autorizado; nunca con SYSTEM ni con otra cuenta.");
         Validate(job.Network);
         if (RequiresPersonalCredentials(job) && job.Network.Mode == "Service")
             throw new ArgumentException("Este respaldo usa una carpeta de red. En Destino y acceso selecciona la cuenta de este usuario o una cuenta autorizada y guarda su contraseña de Windows. Las ejecuciones local, programada y remota usarán esas mismas credenciales; no se utiliza la sesión abierta ni la cuenta del servidor como alternativa.");

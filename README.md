@@ -1,4 +1,4 @@
-# ProBackUp 3.3
+﻿# ProBackUp 3.4
 
 Respaldos para Windows 10/11 x64 con modo oscuro/claro, nuevo logo de datos, servicio automático, destinos de red mediante la sesión del usuario, programación por días y horas, respaldos completos e incrementales y versiones de archivos por día.
 
@@ -10,7 +10,7 @@ Versiones de archivos incluye búsqueda por nombre/ruta, filtro combinado de ext
 
 [Instalador](dist/ProBackUp-Setup.exe) · [Manual](LEEME.txt) · [Validación y límites](docs/validacion.md) · [Logo](assets/probackup-logo.png)
 
-El instalador requiere administrador, instala en Program Files y registra/inicia `ProBackUpService` como LocalSystem. La administración también solicita elevación. El servicio espera a que el usuario de cada tarea tenga sesión iniciada. Configuración y claves se guardan en ProgramData con ACL para administradores y SYSTEM; las claves usan DPAPI LocalMachine.
+El instalador requiere administrador, instala en Program Files y registra/inicia `ProBackUpService` como LocalSystem. La interfaz abre sin elevación con el usuario del escritorio; solo la instalación o reparación del servicio requieren administrador. El servicio espera a que el usuario de cada tarea tenga sesión iniciada. Configuración y claves se guardan en ProgramData con ACL para el usuario asignado durante la instalación, administradores y SYSTEM; las claves usan DPAPI LocalMachine.
 
 Las tareas utilizan la sesión de Windows de su dueño mediante WTS e identidad acotada al acceso a datos; no guardan su contraseña. Si el usuario no tiene sesión activa, esperan hasta su próximo inicio. Se conservan los permisos originales de cada carpeta. El botón de prueba verifica escritura/lectura/eliminación.
 
@@ -70,7 +70,7 @@ SCM con cuenta virtual y carga prolongada pendiente; no se desplegó en esta ses
 
 
 EJECUCIÓN DESDE EL SERVIDOR (3.2)
-En el panel central: Administración > cliente > Respaldar > seleccionar tarea > Ejecutar respaldo ahora. Requiere cliente 3.3, conexión al servidor activada y servicio ProBackUpService en ejecución. Recoge órdenes cada 15 segundos, espera si hay una operación local y caduca solicitudes aún no recogidas a las 24 horas; las que esperan sesión se conservan hasta que el usuario vuelva. Los reintentos no duplican copias. Solo un administrador del panel puede solicitar respaldos. Las actualizaciones del programa siguen siendo manuales.
+En el panel central: Administración > cliente > Respaldar > seleccionar tarea > Ejecutar respaldo ahora. Requiere cliente 3.3, conexión al servidor activada y servicio ProBackUpService en ejecución. Recoge órdenes cada 15 segundos, espera si hay una operación local y caduca solicitudes aún no recogidas a las 24 horas; las que esperan sesión se conservan hasta que el usuario vuelva. Los reintentos no duplican copias. Solo un administrador del panel puede solicitar respaldos. Configuración > Buscar actualizaciones descarga versiones estables del cliente desde GitHub Releases y verifica su SHA-256 antes de iniciar el instalador con UAC.
 
 
 EJECUCIÓN CON SESIÓN DE WINDOWS (3.3)
@@ -85,3 +85,5 @@ Corrige el error Windows 1346 al ejecutar la interfaz como administrador. El acc
 
 Mapa de carpetas: [Organizacion del proyecto](docs/organizacion.md).
 
+
+Consulta [ejecución sin elevación y actualizaciones](docs/cliente-actualizaciones.md) para instalar desde la sesión correcta y publicar nuevas versiones.
