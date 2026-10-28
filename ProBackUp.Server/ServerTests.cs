@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -33,6 +33,7 @@ internal static class ServerTests
             async Task<string> Csrf(HttpClient client) => (await client.GetFromJsonAsync<JsonElement>("/api/csrf")).GetProperty("token").GetString()!;
             async Task<HttpResponseMessage> Post(HttpClient client, string path, object data, bool csrf = true)
             { using var msg = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(data) }; if (csrf) msg.Headers.Add("X-CSRF-TOKEN", await Csrf(client)); return await client.SendAsync(msg); }
+            Check((await admin.GetAsync("/api/reports/export.xlsx")).StatusCode == HttpStatusCode.Unauthorized, "Excel requiere sesion web autenticada");
             Check((await admin.GetAsync("/api/reports")).StatusCode == HttpStatusCode.Unauthorized, "Panel de reportes rechaza acceso anónimo");
             Check((await admin.GetAsync("/")).IsSuccessStatusCode && (await admin.GetStringAsync("/app.js")).Contains("csrf"), "Panel y recursos incrustados disponibles por HTTPS");
             using (var web = await admin.GetAsync("/")) {
@@ -60,6 +61,17 @@ internal static class ServerTests
             var data = await reader.GetFromJsonAsync<JsonElement>("/api/reports?type=Incremental&destination=nas&user=usuario"); var rows = data.GetProperty("rows");
             Check(rows.GetArrayLength() == 1 && rows[0].GetProperty("report").GetProperty("copiedBytes").GetInt64() == item.CopiedBytes && rows[0].GetProperty("report").GetProperty("bytes").GetInt64() == item.Bytes, "Filtros y métricas distinguen versión completa de datos nuevos");
             Check((await reader.GetFromJsonAsync<JsonElement>("/api/reports?type=FullZip")).GetProperty("rows").GetArrayLength() == 0, "Filtro excluye tipos diferentes");
+            Check((await machine.GetAsync("/api/reports/export.xlsx")).StatusCode == HttpStatusCode.Unauthorized, "Clave de cliente no permite descargar Excel");
+            using (var excel = await reader.GetAsync("/api/reports/export.xlsx?type=Incremental&destination=nas&user=usuario"))
+            {
+                using var package = new System.IO.Compression.ZipArchive(new MemoryStream(await excel.Content.ReadAsByteArrayAsync()));
+                var worksheet = System.Xml.Linq.XDocument.Load(package.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+                Check(excel.IsSuccessStatusCode && excel.Content.Headers.ContentType?.MediaType == ReportExcel.ContentType && excel.Content.Headers.ContentDisposition?.FileName?.Contains(".xlsx") == true && worksheet.Descendants(System.Xml.Linq.XName.Get("row", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")).Count() == 2, "Usuario Consulta descarga XLSX con filtros y nombre de archivo");
+            }
+            ReportExcel.Gate.Wait();
+            try { Check((await reader.GetAsync("/api/reports/export.xlsx")).StatusCode == HttpStatusCode.TooManyRequests, "Excel limita exportaciones simultaneas sin bloquear reportes de clientes"); }
+            finally { ReportExcel.Gate.Release(); }
+            ReportExcelTests.Run(root, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(reportPath))!, "excel-export-test.xlsx"), Check);
             var agents = await reader.GetFromJsonAsync<JsonElement>("/api/agents");
             Check(agents[0].GetProperty("lastBackup").GetDateTimeOffset() == item.Finished, "Tarjeta usa la fecha del respaldo exitoso y no el latido del equipo");
             var failed = new CentralReport { Id = Guid.NewGuid().ToString("N"), JobId = item.JobId, JobName = item.JobName, Format = item.Format, Status = "Error", Started = item.Started, Finished = item.Finished.AddSeconds(1) };

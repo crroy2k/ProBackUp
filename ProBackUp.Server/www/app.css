@@ -1,8 +1,58 @@
-﻿:root{color-scheme:dark;font:15px "Segoe UI",system-ui,sans-serif;background:#0e141e;color:#e8eff8}*{box-sizing:border-box}body{margin:0}header{display:flex;align-items:center;gap:24px;background:#111925;padding:16px clamp(12px,1.25vw,28px);border-bottom:1px solid #304053}.brand{font-size:24px;margin-right:auto}.brand span,.muted,footer{color:#9db0c6}main{width:100%;min-width:0;margin:0;padding:20px clamp(12px,1.25vw,28px)}h1{font-size:28px}h2{font-size:20px;margin-top:30px}section{background:#161f2c;border:1px solid #304053;border-radius:14px;padding:clamp(14px,1.25vw,24px);margin:16px 0;min-width:0}#login{max-width:580px;margin:50px auto}label{display:flex;flex-direction:column;gap:8px;margin:12px 0}input,select,textarea,button{font:inherit;color:inherit;background:#1d2939;border:1px solid #40546b;border-radius:7px;padding:11px}button{cursor:pointer}button:hover{border-color:#26c3a2}button:disabled{opacity:.45;cursor:default}.primary{background:#26c3a2;color:#08231f;border-color:#26c3a2;font-weight:600}nav,.pager{display:flex;align-items:center;gap:12px}.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:12px;align-items:end}.filters label{min-width:0;margin:12px 0}.filters button{margin-bottom:12px;min-height:44px}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{border:1px solid #304053;border-radius:10px;padding:16px;min-width:230px}.card p{margin:8px 0}.table{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:14px 10px;border-bottom:1px solid #304053;vertical-align:top;min-width:110px}th{color:#9db0c6}td p{margin:4px 0;overflow-wrap:anywhere;max-width:300px}.ok{color:#22c55e}.error{color:#f87171}.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:0 20px}.settings button{align-self:end;margin:12px 0}#message{white-space:pre-wrap;color:#facc15}#enrollment{background:#1d2939;padding:16px;border:1px solid #26c3a2}#agentToken{width:100%;font-family:monospace}#registered .card{display:inline-block;margin:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.6}dialog{max-width:800px;width:90%;background:#161f2c;color:#e8eff8;border:1px solid #40546b;border-radius:14px}dialog::backdrop{background:#000a}footer{padding:20px clamp(12px,1.25vw,28px);font-size:13px}[hidden]{display:none!important}
-
-.warning{color:#facc15}
-
-.register-client{display:flex;gap:12px;align-items:end;flex-wrap:wrap;max-width:720px;margin-bottom:20px}.register-client label{flex:1;min-width:240px}.register-client button{margin-bottom:12px}#enrollment{border-radius:10px;margin:16px 0 24px}#enrollment button{margin-top:12px}.client-list{margin-top:24px}.client-actions{min-width:300px}.client-actions button{margin:0 8px 8px 0}.danger{color:#fca5a5;border-color:#994747}.danger:hover{border-color:#f87171;background:#3b2028}.actions{display:flex;gap:12px}
+using System.Net;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using ProBackUp.Central;
+namespace ProBackUp.Server;
+internal static class ServerTests
+{
+    private sealed class TestDirectory : IDirectory
+    {
+        public Task<DirectoryUser?> Lookup(LdapSettings settings, string upn) => Task.FromResult(settings.Allowed(upn) == null ? null : new DirectoryUser(upn, upn.StartsWith("admin") ? "11111111111111111111111111111111" : "22222222222222222222222222222222"));
+        public Task<DirectoryUser?> Authenticate(LdapSettings settings, string upn, string password) => password == "correcta" ? Lookup(settings, upn) : Task.FromResult<DirectoryUser?>(null);
+    }
+    internal static async Task Run(string reportPath)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ProBackUp-server-test-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root); var results = new List<string>();
+        void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL: " + name); results.Add("PASS: " + name); }
+        using var rsa = RSA.Create(2048); var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1); var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); request.CertificateExtensions.Add(san.Build()); using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1)); using var cert = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pfx, "test"), "test", X509KeyStorageFlags.UserKeySet);
+        var settings = new ServerSettings { PublicHost = "localhost", Port = 0, Ldap = new LdapSettings { Host = "dc.example.test", BaseDn = "DC=example,DC=test", BindDn = "reader@example.test", ProtectedPassword = Configuration.Protect("no-es-una-clave-real"), Users = [new() { Upn = "admin@example.test", Role = "Admin" }, new() { Upn = "reader@example.test", Role = "Reader" }] } };
+        var config = new Configuration(root, settings);
+        await using var app = Program.Build(config, new TestDirectory(), cert, true);
+        try
+        {
+            Check(!Program.IisMode(null, "ProBackUp.Server") && Program.IisMode("IIS", "w3wp"), "Selecciona alojamiento IIS nativo sin alterar el servicio independiente");
+            bool invalidIis = false; try { Program.IisMode("IIS", "ProBackUp.Server"); } catch (InvalidOperationException) { invalidIis = true; }
+            Check(invalidIis, "Rechaza activar modo IIS fuera de IIS, sin abrir HTTP alternativo");
+            await app.StartAsync(); var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single(); address = address.Replace("127.0.0.1", "localhost");
+            HttpClient Client() => new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false, ServerCertificateCustomValidationCallback = (_, serverCert, _, _) => serverCert != null && serverCert.RawData.SequenceEqual(cert.RawData) }) { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(10) };
+            using var admin = Client(); using var reader = Client(); using var machine = Client();
+            async Task<string> Csrf(HttpClient client) => (await client.GetFromJsonAsync<JsonElement>("/api/csrf")).GetProperty("token").GetString()!;
+            async Task<HttpResponseMessage> Post(HttpClient client, string path, object data, bool csrf = true)
+            { using var msg = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(data) }; if (csrf) msg.Headers.Add("X-CSRF-TOKEN", await Csrf(client)); return await client.SendAsync(msg); }
+            Check((await admin.GetAsync("/api/reports/export.xlsx")).StatusCode == HttpStatusCode.Unauthorized, "Excel requiere sesion web autenticada");
+            Check((await admin.GetAsync("/api/reports")).StatusCode == HttpStatusCode.Unauthorized, "Panel de reportes rechaza acceso anónimo");
+            Check((await admin.GetAsync("/")).IsSuccessStatusCode && (await admin.GetStringAsync("/app.js")).Contains("csrf"), "Panel y recursos incrustados disponibles por HTTPS");
+            using (var web = await admin.GetAsync("/")) {
+                var markup = await web.Content.ReadAsStringAsync();
+                Check(web.Content.Headers.ContentType?.CharSet == "utf-8" && markup.Contains("Supervisión de respaldos") && markup.Contains("Contraseña") && !markup.Contains("Ã") && !markup.Contains("Â"), "HTML conserva tildes y ene con charset UTF-8 explicito");
+            }
+            Check((await Post(admin, "/api/login", new { Upn = "admin@example.test", Password = "correcta" }, false)).StatusCode == HttpStatusCode.BadRequest, "Inicio de sesión exige token CSRF");
+            Check((await Post(admin, "/api/login", new { Upn = "intruso@example.test", Password = "correcta" })).StatusCode == HttpStatusCode.Unauthorized, "Usuario fuera de lista explícita rechazado");
+            Check(settings.Ldap.QualifyUser("nuevo") == "nuevo@example.test" && settings.Ldap.QualifyUser("actual@other.test") == "actual@other.test", "Usuarios nuevos completan dominio AD y cuentas existentes conservan su UPN");
+            Check(settings.Ldap.ResolveLogin(" ADMIN ") == "admin@example.test" && settings.Ldap.ResolveLogin("intruso") == "intruso", "Usuario corto resuelve solo una cuenta autorizada, sin distinguir mayusculas");
+            var ambiguous = new LdapSettings { Users = [new() { Upn = "admin@example.test" }, new() { Upn = "admin@other.test" }] };
+            Check(ambiguous.ResolveLogin("admin") == "admin" && ambiguous.ResolveLogin("admin@other.test") == "admin@other.test", "Nombres ambiguos exigen UPN explicito");
+            var login = await Post(admin, "/api/login", new { Upn = "admin", Password = "correcta" });
+            Check(login.IsSuccessStatusCode && login.Headers.GetValues("Set-Cookie").Any(c => c.Contains("secure", StringComparison.OrdinalIgnoreCase) && c.Contains("httponly", StringComparison.OrdinalIgnoreCase) && c.Contains("samesite=strict", StringComparison.OrdinalIgnoreCase)), "Cookie de sesión Secure, HttpOnly y SameSite Strict");
+            Check((await Post(reader, "/api/login", new { Upn = "reader@example.test", Password = "correcta" })).IsSuccessStatusCode, "Usuario de consulta puede autenticarse");
+            Check((await reader.GetAsync("/api/admin/ldap")).StatusCode == HttpStatusCode.Forbidden && (await Post(reader, "/api/admin/agents", new { Name = "No permitido" })).StatusCode == HttpStatusCode.Forbidden, "Reader no puede cambiar LDAP ni registrar equipos");
+            var registration = await Post(admin, "/api/admin/agents", new { Name = "PC-Prueba" }); var registered = await registration.Content.ReadFromJsonAsync<JsonElement>(); var key = registered.GetProperty("token").GetString()!; var id = registered.GetProperty("id").GetString()!;
+            Check(registration.IsSuccessStatusCode && key.Length == 64 && !(await admin.GetStringAsync("/api/agents")).Contains(key), "Clave individual fuerte, mostrada solo al crearla");
+            var item = new CentralReport { Id = Guid.NewGuid().ToString("N"), JobId = Guid.NewGuid().ToString("N"), JobName = "Documentos", User = "usuario@example.test", Destination = @"\\nas\respaldo", Format = "Incremental", Status = "Correcto", Started = DateTimeOffset.UtcNow.AddMinutes(-2), Fin…5117 tokens truncated…ap;max-width:720px;margin-bottom:20px}.register-client label{flex:1;min-width:240px}.register-client button{margin-bottom:12px}#enrollment{border-radius:10px;margin:16px 0 24px}#enrollment button{margin-top:12px}.client-list{margin-top:24px}.client-actions{min-width:300px}.client-actions button{margin:0 8px 8px 0}.danger{color:#fca5a5;border-color:#994747}.danger:hover{border-color:#f87171;background:#3b2028}.actions{display:flex;gap:12px}
 
 #remoteBackup{max-width:1100px}#remoteMessage{color:#9db0c6;line-height:1.5}.client-actions{min-width:410px}
 
@@ -21,3 +71,8 @@ header{flex-wrap:wrap;min-width:0}#identity{overflow-wrap:anywhere;min-width:0}.
 @media(max-width:360px){.filters{grid-template-columns:minmax(0,1fr)}}
 
 .authorized-users{grid-column:1/-1;min-width:0;margin:12px 0}.authorized-users h2{margin-top:0}.authorized-users td{padding:10px}.authorized-users input,.authorized-users select{width:100%}.authorized-users th:last-child,.authorized-users td:last-child{width:110px}.authorized-users>button{margin-top:12px}#ldapForm>button{justify-self:start}
+
+/* Compact authorized-user editor; avoid inherited settings-button margins. */
+.authorized-users{max-width:780px}.authorized-users .table{max-height:330px;overflow:auto}.authorized-users table{table-layout:fixed;min-width:420px}.authorized-users th{position:sticky;top:0;background:#161f2c;z-index:1}.authorized-users th,.authorized-users td{padding:6px 8px;min-width:0;vertical-align:middle}.authorized-users th:first-child{width:48%}.authorized-users th:nth-child(2){width:36%}.authorized-users th:last-child,.authorized-users td:last-child{width:86px}.authorized-users input,.authorized-users select{font-size:13px;padding:6px 9px;height:34px}.authorized-users td button{margin:0;padding:6px 10px;height:34px;font-size:13px}.authorized-users>button{margin:10px 0 0;padding:8px 12px}
+
+.export-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 16px}.export-bar .muted{font-size:13px}

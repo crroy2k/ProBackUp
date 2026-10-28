@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Diagnostics;
 using System.Security.Authentication;
 using System.Security.Claims;
@@ -152,6 +152,19 @@ internal static class Program
         app.MapGet("/api/me", (HttpContext context) => Results.Ok(new { user = context.User.Identity!.Name, admin = context.User.IsInRole("Admin") })).RequireAuthorization();
         app.MapGet("/api/agents", (Database db) => Results.Ok(db.Agents())).RequireAuthorization();
         app.MapGet("/api/reports", (Database db, string? agent, string? type, string? status, string? destination, string? user, DateTimeOffset? from, DateTimeOffset? to, int? page) => Results.Ok(db.Reports(agent, type, status, destination, user, from, to, page ?? 0))).RequireAuthorization();
+        app.MapGet("/api/reports/export.xlsx", (HttpContext context, Database db, string? agent, string? type, string? status, string? destination, string? user, DateTimeOffset? from, DateTimeOffset? to) =>
+        {
+            if (!ReportExcel.Gate.Wait(0)) return Results.StatusCode(429);
+            try
+            {
+                var filters = new Dictionary<string, string> { ["Equipo (ID)"] = agent ?? "Todos", ["Tipo"] = type ?? "Todos", ["Resultado"] = status ?? "Todos", ["Destino contiene"] = destination ?? "Todos", ["Usuario contiene"] = user ?? "Todos", ["Desde (Costa Rica)"] = from.HasValue ? ReportExcel.Local(from.Value).ToString("yyyy-MM-dd HH:mm:ss") : "Sin límite", ["Hasta, exclusivo (Costa Rica)"] = to.HasValue ? ReportExcel.Local(to.Value).ToString("yyyy-MM-dd HH:mm:ss") : "Sin límite" };
+                var export = ReportExcel.Create(db.ReadReports(agent, type, status, destination, user, from, to), config.Root, filters, context.RequestAborted);
+                try { db.Audit(context.User.Identity!.Name!, "Exportó historial a Excel: " + export.Rows + " registros"); }
+                catch { export.Stream.Dispose(); throw; }
+                return Results.Stream(export.Stream, ReportExcel.ContentType, "ProBackUp-respaldos-" + ReportExcel.Local(DateTimeOffset.UtcNow).ToString("yyyyMMdd-HHmmss") + ".xlsx");
+            }
+            finally { ReportExcel.Gate.Release(); }
+        }).RequireAuthorization();
         app.MapGet("/api/admin/audit", (Database db) => Results.Ok(db.AuditLog())).RequireAuthorization("Admin");
         app.MapGet("/api/admin/ldap", () => { var ldap = config.Current.Ldap; return Results.Ok(new { ldap.Host, ldap.Port, ldap.BaseDn, ldap.BindDn, ldap.Users, domain = ldap.UserDomain(), passwordConfigured = ldap.ProtectedPassword.Length > 0 }); }).RequireAuthorization("Admin");
         app.MapPost("/api/admin/ldap", async (LdapEdit edit, HttpContext context, Database db) =>
