@@ -1,4 +1,6 @@
-ProBackUp Cliente 3.4.0
+﻿ProBackUp Cliente 3.4.1
+
+Nuevo: limitador de velocidad por tarea en Destino y acceso. Desactivado por defecto para tareas nuevas y existentes. Activa Limitar velocidad de subida e indica el maximo en Mbps (megabits por segundo; 1 Mbps = 125000 bytes/s). Comparte el presupuesto entre todos los archivos escritos al destino, los metadatos y la salida ZIP comprimida. Funciona en completos ZIP/espejo e incrementales y en ejecuciones manuales, programadas o remotas. No limita las restauraciones ni las lecturas de verificacion; el protocolo SMB y otro trafico de red tienen sobrecarga adicional. En enlaces compartidos, reparte el ancho de banda entre maquinas.
 
 La interfaz abre con el usuario conectado, sin pedir administrador. La instalación y el botón Reparar servicio sí requieren UAC. Incluso si se introducen credenciales de otra cuenta administradora durante la instalación, el acceso a los datos se concede al usuario del escritorio y la aplicación se abre con ese usuario.
 

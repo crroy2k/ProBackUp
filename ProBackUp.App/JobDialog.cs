@@ -10,6 +10,8 @@ public sealed class JobDialog : Form
     private readonly NumericUpDown retention = new() { Minimum = 0, Maximum = 36500, Width = 180 }, limit = new() { Minimum = 0, Maximum = 1000000, DecimalPlaces = 2, Width = 180 };
     private readonly CheckBox clean = new() { Text = "Liberar espacio eliminando las versiones más antiguas", AutoSize = true }, manualLimit = new() { Text = "Establecer un límite manual (opcional)", AutoSize = true };
     private readonly NetworkCredentialsEditor credentials = new();
+    private readonly CheckBox limitUpload = new() { Text = "Limitar velocidad de subida", Name = "limitUploadSpeed", AutoSize = true };
+    private readonly NumericUpDown uploadMbps = new() { Name = "maxUploadMbps", Minimum = 0.1m, Maximum = 100000, DecimalPlaces = 2, Increment = 0.5m, Value = 10, Width = 180 };
     private readonly CheckBox scheduled = new() { Text = "Programar respaldo mientras el usuario tenga sesión iniciada", AutoSize = true }, missed = new() { Text = "Ejecutar el último respaldo vencido al iniciar sesión", AutoSize = true };
     private readonly List<(DayOfWeek day, CheckBox control)> days = [];
     public JobDialog(BackupJob? existing, bool dark = true)
@@ -45,6 +47,10 @@ public sealed class JobDialog : Form
         credentials.LoadSettings(Job.Network); credentials.SuggestPersonalAccount(Job.Owner); Field(network, credentials);
         destination.TextChanged += (_, _) => { if (NetworkAccess.IsNetworkPath(destination.Text.Trim())) credentials.SuggestPersonalAccount(Job.Owner); };
         network.Controls.Add(Button("Probar conexión de lectura y escritura", async (_, _) => { try { ReadFields(false); await NetworkAccess.Test(Job); MessageBox.Show(this, "El destino permite leer y escribir con la cuenta seleccionada. Espacio disponible informado: " + (await NetworkAccess.RunJob(Job, () => Task.FromResult(StoragePolicy.Available(Job.Destination))) / (1024d * 1024 * 1024)).ToString("N2") + " GB. El servidor puede informar la cuota individual o el disco completo.", "Conexión correcta"); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "No se pudo conectar"); } }));
+        Field(network, limitUpload); Label(network, "Velocidad máxima de subida (Mbps)"); Field(network, uploadMbps);
+        Label(network, "Desactivado = sin límite. Mbps son megabits por segundo: 10 Mbps ≈ 1,25 MB/s. Se aplica a los datos escritos al destino en respaldos completos e incrementales, tanto manuales como programados o remotos. El tráfico del protocolo y las lecturas de verificación no forman parte del límite. Si varias máquinas comparten el enlace, asigna a cada una una parte del ancho de banda.", true);
+        limitUpload.Checked = Job.LimitUploadSpeed; uploadMbps.Value = Math.Clamp(Job.MaxUploadMbps, uploadMbps.Minimum, uploadMbps.Maximum); uploadMbps.Enabled = limitUpload.Checked;
+        limitUpload.CheckedChanged += (_, _) => uploadMbps.Enabled = limitUpload.Checked;
         var schedule = Section("3  Días y horarios"); Field(schedule, scheduled); Label(schedule, "Días de la semana");
         var week = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         foreach (var pair in new[] { (DayOfWeek.Monday, "Lun"), (DayOfWeek.Tuesday, "Mar"), (DayOfWeek.Wednesday, "Mié"), (DayOfWeek.Thursday, "Jue"), (DayOfWeek.Friday, "Vie"), (DayOfWeek.Saturday, "Sáb"), (DayOfWeek.Sunday, "Dom") })
@@ -76,6 +82,7 @@ public sealed class JobDialog : Form
         Job.Network = credentials.ReadSettings();
         NetworkAccess.ValidateJob(Job);
         Job.Owner = Job.Network.User;
+        Job.LimitUploadSpeed = limitUpload.Checked; Job.MaxUploadMbps = uploadMbps.Value;
         Job.RetentionDays = (int)retention.Value; Job.CleanWhenFull = clean.Checked;
         if (manualLimit.Checked && limit.Value <= 0) throw new ArgumentException("Indica un límite mayor que cero o desactiva el límite manual.");
         Job.StorageLimitBytes = manualLimit.Checked ? (long)(limit.Value * 1024m * 1024 * 1024) : 0;

@@ -64,7 +64,7 @@ internal static class Program
             }
             if (!File.Exists(Path.Combine(stage, "ProBackUp.exe"))) throw new IOException("Falta ProBackUp.exe.");
             File.Copy(test ? testInstaller ?? throw new ArgumentException("Falta el instalador de prueba.") : Environment.ProcessPath!, Path.Combine(stage, "Uninstall.exe"));
-            File.WriteAllText(Path.Combine(stage, ".probackup-install.json"), JsonSerializer.Serialize(new { product = "ProBackUp", version = "3.4.0", path = Path.GetFullPath(target) }));
+            File.WriteAllText(Path.Combine(stage, ".probackup-install.json"), JsonSerializer.Serialize(new { product = "ProBackUp", version = "3.4.1", path = Path.GetFullPath(target) }));
             // Fail before touching an existing installation if a binary is in use.
             foreach (var name in OwnedFiles)
             {
@@ -120,7 +120,7 @@ internal static class Program
     public static void Register(string target, bool desktop)
     {
         using var registry = Registry.LocalMachine.CreateSubKey(RegistryPath);
-        registry.SetValue("DisplayName", "ProBackUp"); registry.SetValue("DisplayVersion", "3.4.0"); registry.SetValue("Publisher", "ProBackUp"); registry.SetValue("InstallLocation", target); registry.SetValue("DisplayIcon", Path.Combine(target, "ProBackUp.exe")); registry.SetValue("UninstallString", $"\"{Path.Combine(target, "Uninstall.exe")}\" --uninstall"); registry.SetValue("NoModify", 1, RegistryValueKind.DWord); registry.SetValue("NoRepair", 1, RegistryValueKind.DWord); registry.SetValue("EstimatedSize", (int)(OwnedFiles.Where(n => File.Exists(Path.Combine(target, n))).Sum(n => new FileInfo(Path.Combine(target, n)).Length) / 1024), RegistryValueKind.DWord);
+        registry.SetValue("DisplayName", "ProBackUp"); registry.SetValue("DisplayVersion", "3.4.1"); registry.SetValue("Publisher", "ProBackUp"); registry.SetValue("InstallLocation", target); registry.SetValue("DisplayIcon", Path.Combine(target, "ProBackUp.exe")); registry.SetValue("UninstallString", $"\"{Path.Combine(target, "Uninstall.exe")}\" --uninstall"); registry.SetValue("NoModify", 1, RegistryValueKind.DWord); registry.SetValue("NoRepair", 1, RegistryValueKind.DWord); registry.SetValue("EstimatedSize", (int)(OwnedFiles.Where(n => File.Exists(Path.Combine(target, n))).Sum(n => new FileInfo(Path.Combine(target, n)).Length) / 1024), RegistryValueKind.DWord);
         Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ProBackUp", "ProBackUp.lnk"), Path.Combine(target, "ProBackUp.exe"));
         Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ProBackUp", "Desinstalar ProBackUp.lnk"), Path.Combine(target, "Uninstall.exe"));
         // The uninstaller shortcut must carry its mode argument.

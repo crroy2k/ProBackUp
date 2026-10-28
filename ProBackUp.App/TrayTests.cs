@@ -17,6 +17,18 @@ internal static class TrayTests
                 credentials.SuggestPersonalAccount(@"DOMINIO\tercero");
                 Check(credentials.ReadSettings().User == current.Name, "Una sugerencia de cuenta diferente no sustituye al usuario conectado");
             }
+            using (var editor = new JobDialog(new BackupJob { MaxUploadMbps = 2.5m }))
+            {
+                var limit = (CheckBox)editor.Controls.Find("limitUploadSpeed", true).Single();
+                var rate = (NumericUpDown)editor.Controls.Find("maxUploadMbps", true).Single();
+                Check(!limit.Checked && !rate.Enabled && rate.Value == 2.5m, "Editor muestra límite en Mbps desactivado por defecto y conserva el valor guardado");
+                limit.Checked = true; rate.Value = 1.25m;
+                typeof(JobDialog).GetMethod("ReadFields", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(editor, [false]);
+                Check(rate.Enabled && editor.Job.LimitUploadSpeed && editor.Job.MaxUploadMbps == 1.25m, "Activar y guardar límite conserva Mbps con decimales en la tarea");
+                limit.Checked = false;
+                typeof(JobDialog).GetMethod("ReadFields", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(editor, [false]);
+                Check(!rate.Enabled && !editor.Job.LimitUploadSpeed && editor.Job.MaxUploadMbps == 1.25m, "Desactivar el límite elimina la restricción sin perder la velocidad seleccionada");
+            }
             using var activation = new EventWaitHandle(false, EventResetMode.AutoReset);
             using var form = new MainForm(new AppSettings(), activation: activation);
             form.Show(); Application.DoEvents(); Check(form.TrayVisible && form.Visible, "Crea icono al abrir la aplicación");
