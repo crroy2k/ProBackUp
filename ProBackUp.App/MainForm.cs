@@ -211,18 +211,14 @@ public sealed class MainForm : Form
         foreach (DataGridViewRow row in history.Rows) if ((row.Tag as BackupRecord)?.Id == recordId) { history.ClearSelection(); history.CurrentCell = row.Cells[0]; row.Selected = true; break; }
         emptyJobs.Visible = settings.Jobs.Count == 0; if (emptyJobs.Visible) emptyJobs.BringToFront(); UpdateActions(); if (pages.Count == 3) ApplyTheme();
     }
-    private async Task EditJob(BackupJob? existing)
+    private Task EditJob(BackupJob? existing)
     {
-        using var editor = new JobDialog(existing, settings.DarkMode);
-        if (editor.ShowDialog(this) != DialogResult.OK) return;
-        await Busy(async _ =>
+        using var editor = new JobDialog(existing, settings.DarkMode, async job =>
         {
-            using var gate = Store.Acquire(); var previous = Store.Load(); var next = Store.Load();
-            var index = next.Jobs.FindIndex(j => j.Id == editor.Job.Id); if (index < 0) next.Jobs.Add(editor.Job); else next.Jobs[index] = editor.Job;
-            Store.Save(next);
-            try { await Scheduler.Apply(editor.Job); } catch { Store.Save(previous); throw; }
-            settings = next; RefreshAll(); status.Text = "Tarea guardada";
+            await JobConfiguration.Apply(job);
+            settings = Store.Load(); RefreshAll(); status.Text = "Configuración aplicada";
         });
+        editor.ShowDialog(this); return Task.CompletedTask;
     }
     private async Task DeleteJob()
     {
@@ -304,7 +300,7 @@ public sealed class MainForm : Form
             settings.DarkMode = dark;
             for (int i = 0; i < pages.Count; i++)
             { SelectPage(i); Application.DoEvents(); using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size)); bitmap.Save(Path.Combine(directory, $"{(dark ? "oscuro" : "claro")}-{i + 1}.png")); }
-            using var editor = new JobDialog(null, dark); editor.Show(); Application.DoEvents(); using var dialogImage = new Bitmap(editor.Width, editor.Height); editor.DrawToBitmap(dialogImage, new Rectangle(Point.Empty, editor.Size)); dialogImage.Save(Path.Combine(directory, $"{(dark ? "oscuro" : "claro")}-nuevo-respaldo.png")); editor.Close();
+            using var editor = new JobDialog(null, dark); editor.Show(); Application.DoEvents(); using var dialogImage = new Bitmap(editor.Width, editor.Height); editor.DrawToBitmap(dialogImage, new Rectangle(Point.Empty, editor.Size)); dialogImage.Save(Path.Combine(directory, $"{(dark ? "oscuro" : "claro")}-nuevo-respaldo.png")); editor.Dispose();
         }
         settings.DarkMode = original; SelectPage(selectedPage);
         Hide();

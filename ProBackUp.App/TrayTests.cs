@@ -29,6 +29,29 @@ internal static class TrayTests
                 typeof(JobDialog).GetMethod("ReadFields", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(editor, [false]);
                 Check(!rate.Enabled && !editor.Job.LimitUploadSpeed && editor.Job.MaxUploadMbps == 1.25m, "Desactivar el límite elimina la restricción sin perder la velocidad seleccionada");
             }
+            Directory.CreateDirectory(temp); var source = Path.Combine(temp, "apply-source.txt"); File.WriteAllText(source, "datos");
+            using (var owner = System.Security.Principal.WindowsIdentity.GetCurrent())
+            {
+                var configured = new BackupJob { Name = "Aplicar configuración", Sources = [source], Destination = Path.Combine(temp, "apply-destination"), Owner = owner.Name, Network = new() { Mode = "Session", User = owner.Name, UserSid = owner.User!.Value } };
+                Store.Save(new AppSettings { Jobs = [configured] });
+                using var editor = new JobDialog(configured);
+                var status = (Label)editor.Controls.Find("configurationStatus", true).Single(); var apply = (Button)editor.Controls.Find("applyChanges", true).Single();
+                var limit = (CheckBox)editor.Controls.Find("limitUploadSpeed", true).Single(); var rate = (NumericUpDown)editor.Controls.Find("maxUploadMbps", true).Single();
+                Check(!editor.PendingChanges && !apply.Enabled && status.Text == "Sin cambios pendientes", "Editor existente comienza sin cambios y desactiva Aplicar cambios");
+                limit.Checked = true; rate.Value = 5;
+                Check(editor.PendingChanges && apply.Enabled && status.Text == "Cambios pendientes de aplicar" && !Store.Load().Jobs.Single().LimitUploadSpeed, "Editar marca cambios pendientes sin modificar la configuración activa");
+                editor.ApplyDraft().GetAwaiter().GetResult();
+                Check(!editor.PendingChanges && !apply.Enabled && status.Text == "Configuración aplicada" && Store.Load().Jobs.Single().MaxUploadMbps == 5 && Store.Load().Jobs.Single().LimitUploadSpeed, "Aplicar guarda realmente la tarea sin elevarse y confirma Configuración aplicada");
+                rate.Value = 7;
+                Check(editor.PendingChanges && status.Text == "Cambios pendientes de aplicar" && Store.Load().Jobs.Single().MaxUploadMbps == 5, "Una edición posterior vuelve a pendiente y conserva la última configuración aplicada");
+                rate.Value = 5;
+                Check(!editor.PendingChanges && !apply.Enabled && status.Text == "Configuración aplicada", "Revertir la edición al valor aplicado elimina el aviso pendiente");
+                rate.Value = 7; bool failed = false;
+                using (Store.Acquire()) { try { editor.ApplyDraft().GetAwaiter().GetResult(); } catch (IOException) { failed = true; } }
+                Check(failed && editor.PendingChanges && apply.Enabled && status.Text == "Cambios pendientes de aplicar" && Store.Load().Jobs.Single().MaxUploadMbps == 5, "Si el guardado falla por operación en curso conserva pendientes y no muestra un éxito falso");
+                editor.ApplyDraft().GetAwaiter().GetResult();
+                Check(status.Text == "Configuración aplicada" && Store.Load().Jobs.Count == 1 && Store.Load().Jobs.Single().MaxUploadMbps == 7, "Reintentar aplica correctamente sin duplicar la tarea");
+            }
             using var activation = new EventWaitHandle(false, EventResetMode.AutoReset);
             using var form = new MainForm(new AppSettings(), activation: activation);
             form.Show(); Application.DoEvents(); Check(form.TrayVisible && form.Visible, "Crea icono al abrir la aplicación");

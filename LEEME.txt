@@ -1,4 +1,4 @@
-﻿ProBackUp 3.4.1 — Windows 10/11 x64
+﻿ProBackUp 3.4.2 — Windows 10/11 x64
 
 BUSCADOR Y FILTROS POR DÍA
 En Versiones de archivos, elige el día y la hora. Buscar archivo encuentra nombres
@@ -183,7 +183,7 @@ El servicio no necesita la ventana de ProBackUp abierta. Al iniciar sesión recu
 Las órdenes remotas recogidas sin sesión disponible quedan en Esperando sesión y no caducan mientras esperan. Una orden de una tarea cuyo usuario esté ausente no bloquea a los demás usuarios. Las órdenes aún no recogidas por un equipo desconectado conservan el límite de 24 horas.
 
 
-CORRECCIÓN UAC (3.4.1)
+CORRECCIÓN UAC (3.4.2)
 Corrige el error Windows 1346 al ejecutar la interfaz como administrador. El acceso a datos usa el token del escritorio normal del mismo usuario y sesión, sin depender de un token vinculado de UAC que solo permita identificación. No usa el token elevado como alternativa ni cambia permisos. El servicio mantiene su acceso mediante WTS a la sesión del dueño.
 
 ACTUALIZACIONES DEL CLIENTE
@@ -196,3 +196,9 @@ En cada tarea > Destino y acceso, activa Limitar velocidad de subida e indica el
 Desactivado por defecto. 10 Mbps equivalen a 1,25 MB/s de datos.
 Se aplica a completos e incrementales, manuales, programados y remotos.
 No limita descargas ni la sobrecarga del protocolo; comparte el enlace asignando un limite por equipo.
+
+APLICAR CONFIGURACION DE RESPALDOS
+Al editar una tarea se muestra Cambios pendientes de aplicar.
+Pulsa Aplicar cambios: al guardar correctamente mostrara Configuracion aplicada.
+Cerrar solicita confirmacion si quedan cambios sin aplicar. No requiere administrador.
+Los cambios se usan en la proxima ejecucion; no alteran un respaldo en curso.

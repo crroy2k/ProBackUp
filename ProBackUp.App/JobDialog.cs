@@ -14,8 +14,15 @@ public sealed class JobDialog : Form
     private readonly NumericUpDown uploadMbps = new() { Name = "maxUploadMbps", Minimum = 0.1m, Maximum = 100000, DecimalPlaces = 2, Increment = 0.5m, Value = 10, Width = 180 };
     private readonly CheckBox scheduled = new() { Text = "Programar respaldo mientras el usuario tenga sesión iniciada", AutoSize = true }, missed = new() { Text = "Ejecutar el último respaldo vencido al iniciar sesión", AutoSize = true };
     private readonly List<(DayOfWeek day, CheckBox control)> days = [];
-    public JobDialog(BackupJob? existing, bool dark = true)
+    private readonly Label applyStatus = new() { Name = "configurationStatus", AutoSize = true, Margin = new Padding(8, 14, 16, 0), Tag = "muted" };
+    private readonly Button applyButton = new() { Name = "applyChanges", Text = "Aplicar cambios", AutoSize = true, Padding = new Padding(10, 6, 10, 6), Tag = "primary" };
+    private readonly Func<BackupJob, Task> applyChanges;
+    private string savedDraft = "";
+    private bool trackingChanges, initialPending, appliedOnce, applying;
+    internal bool PendingChanges => initialPending || Draft() != savedDraft;
+    public JobDialog(BackupJob? existing, bool dark = true, Func<BackupJob, Task>? applyChanges = null)
     {
+        this.applyChanges = applyChanges ?? JobConfiguration.Apply;
         Job = existing == null ? new() : JsonSerializer.Deserialize<BackupJob>(JsonSerializer.Serialize(existing))!;
         Text = "ProBackUp · Configurar respaldo"; Size = new Size(860, 810); MinimumSize = new Size(800, 740); Font = new Font("Segoe UI", 10); StartPosition = FormStartPosition.CenterParent; AutoScaleMode = AutoScaleMode.Dpi;
         var iconResource = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico"); if (iconResource != null) Icon = new Icon(iconResource);
@@ -36,10 +43,10 @@ public sealed class JobDialog : Form
         Button Button(string text, EventHandler click) { var b = new Button { Text = text, AutoSize = true, Padding = new Padding(10, 6, 10, 6) }; b.Click += click; return b; }
         var files = Section("1  Archivos y tipo"); Label(files, "Nombre del respaldo"); Field(files, name); Label(files, "Archivos y carpetas que quieres proteger"); Field(files, sources);
         var add = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        void Add(string p) { p = NetworkAccess.Normalize(p); if (!sources.Items.Contains(p)) sources.Items.Add(p); }
+        void Add(string p) { p = NetworkAccess.Normalize(p); if (!sources.Items.Contains(p)) sources.Items.Add(p); RefreshPending(); }
         add.Controls.Add(Button("+ Carpeta", (_, _) => { using var d = new FolderBrowserDialog(); if (d.ShowDialog(this) == DialogResult.OK) Add(d.SelectedPath); }));
         add.Controls.Add(Button("+ Archivos", (_, _) => { using var d = new OpenFileDialog { Multiselect = true }; if (d.ShowDialog(this) == DialogResult.OK) foreach (var p in d.FileNames) Add(p); }));
-        add.Controls.Add(Button("Quitar", (_, _) => { if (sources.SelectedIndex >= 0) sources.Items.RemoveAt(sources.SelectedIndex); })); files.Controls.Add(add);
+        add.Controls.Add(Button("Quitar", (_, _) => { if (sources.SelectedIndex >= 0) sources.Items.RemoveAt(sources.SelectedIndex); RefreshPending(); })); files.Controls.Add(add);
         Label(files, "Tipo de respaldo"); kind.Items.AddRange(BackupArchive.Labels); Field(files, kind);
         Label(files, "Completo copia todos los archivos. Incremental reutiliza los datos sin cambios y conserva una versión recuperable en cada ejecución. La conservación de versiones se configura en Almacenamiento.", true);
         var network = Section("2  Destino y acceso"); Label(network, "Carpeta local, unidad de red o carpeta compartida"); destination.PlaceholderText = @"D:\Respaldos o \\servidor\compartida\Respaldos"; Field(network, destination);
@@ -68,11 +75,58 @@ public sealed class JobDialog : Form
         void StorageEnabled() { bool enabled = kind.SelectedIndex == 2; retention.Enabled = clean.Enabled = manualLimit.Enabled = enabled; limit.Enabled = enabled && manualLimit.Checked; }
         kind.SelectedIndexChanged += (_, _) => StorageEnabled(); manualLimit.CheckedChanged += (_, _) => StorageEnabled();
         var footer = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var save = Button("Guardar respaldo", async (_, _) => { try { ReadFields(true); BackupEngine.ValidateDefinition(Job); await Scheduler.Apply(Job); DialogResult = DialogResult.OK; } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Revisa el respaldo", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }); save.Tag = "primary";
-        var close = Button("Cancelar", (_, _) => DialogResult = DialogResult.Cancel); footer.Controls.Add(save); footer.Controls.Add(close); shell.Controls.Add(footer, 0, 3); Controls.Add(shell); CancelButton = close;
+        applyButton.Click += async (_, _) => { try { await ApplyDraft(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "No se aplicó la configuración", MessageBoxButtons.OK, MessageBoxIcon.Warning); } };
+        var close = Button("Cerrar", (_, _) => Close()); footer.Controls.Add(applyButton); footer.Controls.Add(close); footer.Controls.Add(applyStatus); shell.Controls.Add(footer, 0, 3); Controls.Add(shell); CancelButton = close;
         name.Text = Job.Name; destination.Text = Job.Destination; foreach (var s in Job.Sources) sources.Items.Add(s); kind.SelectedIndex = Job.Incremental ? 2 : Job.Zip ? 0 : 1;
         scheduled.Checked = Job.Daily; hours.Text = string.Join(", ", Scheduler.Hours(Job)); missed.Checked = true; missed.Enabled = false;
         Appearance.Apply(this, dark);
+        savedDraft = Draft();
+        using var current = WindowsIdentity.GetCurrent();
+        initialPending = existing == null || existing.Network.Mode != "Session" || existing.Network.UserSid != current.User?.Value || !existing.RunMissed;
+        foreach (var control in Inputs(this))
+        {
+            if (control is TextBox text) text.TextChanged += (_, _) => RefreshPending();
+            if (control is CheckBox check) check.CheckedChanged += (_, _) => RefreshPending();
+            if (control is ComboBox combo) combo.SelectedIndexChanged += (_, _) => RefreshPending();
+            if (control is NumericUpDown number) number.ValueChanged += (_, _) => RefreshPending();
+        }
+        trackingChanges = true; RefreshPending();
+        FormClosing += (_, e) =>
+        {
+            if (e.CloseReason != CloseReason.UserClosing) return;
+            if (applying) { e.Cancel = true; return; }
+            if (PendingChanges && MessageBox.Show(this, "Hay cambios pendientes de aplicar. ¿Cerrar y descartar los cambios pendientes? La configuración ya aplicada se conservará.", "Cambios pendientes", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) e.Cancel = true;
+        };
+    }
+    private static IEnumerable<Control> Inputs(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            yield return child;
+            if (child is TextBoxBase or NumericUpDown or ComboBox or ListBox) continue;
+            foreach (var nested in Inputs(child)) yield return nested;
+        }
+    }
+    private string Draft() => JsonSerializer.Serialize(new { name = name.Text, destination = destination.Text, sources = sources.Items.Cast<string>().ToArray(), kind = kind.SelectedIndex, scheduled = scheduled.Checked, days = days.Select(d => d.control.Checked).ToArray(), hours = hours.Text, retention = retention.Value, clean = clean.Checked, manualLimit = manualLimit.Checked, storageLimit = limit.Value, limitUpload = limitUpload.Checked, uploadMbps = uploadMbps.Value });
+    private void RefreshPending()
+    {
+        if (!trackingChanges || applying) return;
+        applyStatus.Text = PendingChanges ? "Cambios pendientes de aplicar" : appliedOnce ? "Configuración aplicada" : "Sin cambios pendientes";
+        applyButton.Enabled = PendingChanges;
+    }
+    internal async Task ApplyDraft()
+    {
+        if (applying || !PendingChanges) return;
+        applying = true; Enabled = false; applyStatus.Text = "Aplicando configuración…";
+        try
+        {
+            ReadFields(true); BackupEngine.ValidateDefinition(Job);
+            var candidate = JsonSerializer.Deserialize<BackupJob>(JsonSerializer.Serialize(Job))!;
+            await applyChanges(candidate);
+            savedDraft = Draft(); initialPending = false; appliedOnce = true;
+        }
+        catch { initialPending = true; throw; }
+        finally { applying = false; Enabled = true; RefreshPending(); }
     }
     private void ReadFields(bool validateSchedule)
     {

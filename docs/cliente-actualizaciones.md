@@ -1,4 +1,6 @@
-﻿ProBackUp Cliente 3.4.1
+﻿ProBackUp Cliente 3.4.2
+
+Nuevo: en el editor de cada respaldo, Aplicar cambios guarda la configuracion sin cerrar el editor. Al editar se muestra Cambios pendientes de aplicar y, despues de guardar correctamente, Configuración aplicada. Un fallo conserva el borrador pendiente. Cerrar con cambios solicita confirmacion para descartarlos; la ultima configuracion aplicada permanece activa. No requiere UAC para editar tareas. El servicio usa los valores guardados en la proxima ejecucion; un respaldo en curso mantiene su configuracion.
 
 Nuevo: limitador de velocidad por tarea en Destino y acceso. Desactivado por defecto para tareas nuevas y existentes. Activa Limitar velocidad de subida e indica el maximo en Mbps (megabits por segundo; 1 Mbps = 125000 bytes/s). Comparte el presupuesto entre todos los archivos escritos al destino, los metadatos y la salida ZIP comprimida. Funciona en completos ZIP/espejo e incrementales y en ejecuciones manuales, programadas o remotas. No limita las restauraciones ni las lecturas de verificacion; el protocolo SMB y otro trafico de red tienen sobrecarga adicional. En enlaces compartidos, reparte el ancho de banda entre maquinas.
 
