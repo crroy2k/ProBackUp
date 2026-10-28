@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 const $=id=>document.getElementById(id);let csrf='',page=0,admin=false;
 const say=text=>{$('message').textContent=text};
 async function api(path,body){const res=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf},body:body===undefined?undefined:JSON.stringify(body)});if(!res.ok){if(res.status===401){showLogin();throw Error('Sesión no válida o credenciales no autorizadas.')}throw Error(res.status===429?'Demasiados intentos. Espere antes de volver a intentar.':res.status===403?'Acceso denegado.':res.status===503?'Servicio no disponible. Llame a T.I. Ext. 233.':'No se guardó. Revise los campos y la conexión al directorio.')}const text=await res.text();return text?JSON.parse(text):null}
