@@ -45,3 +45,5 @@ docs/previews/
 
 IISProBackUpServer/LICENSE.txt
 IISProBackUpServer/THIRD-PARTY-NOTICES.txt
+
+docs/*.xlsx

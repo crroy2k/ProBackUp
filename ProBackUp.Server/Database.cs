@@ -68,20 +68,27 @@ internal sealed partial class Database
         using var connection = Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT id,name,revoked,seen,machine,version,(SELECT json_extract(payload,'$.Finished') FROM reports WHERE reports.agent=agents.id AND json_extract(payload,'$.Status')='Correcto' ORDER BY julianday(json_extract(payload,'$.Finished')) DESC LIMIT 1) FROM agents ORDER BY name LIMIT 10000"; using var reader = command.ExecuteReader(); var result = new List<object>();
         while (reader.Read()) result.Add(new { id = reader.GetString(0), name = reader.GetString(1), revoked = reader.GetInt32(2) != 0, seen = reader.IsDBNull(3) ? null : reader.GetString(3), machine = reader.IsDBNull(4) ? null : reader.GetString(4), version = reader.IsDBNull(5) ? null : reader.GetString(5), lastBackup = reader.IsDBNull(6) ? null : reader.GetString(6) }); return result;
     }
+    internal sealed record ReportRow(string Agent, string Name, string Machine, CentralReport Report);
     internal object Reports(string? agent, string? type, string? status, string? destination, string? user, DateTimeOffset? from, DateTimeOffset? to, int page)
+    {
+        var result = ReadReports(agent, type, status, destination, user, from, to, page).ToList();
+        return new { rows = result.Take(100), more = result.Count > 100 };
+    }
+    internal IEnumerable<ReportRow> ReadReports(string? agent, string? type, string? status, string? destination, string? user, DateTimeOffset? from, DateTimeOffset? to, int? page = null)
     {
         using var connection = Open(); using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT reports.agent, agents.name, reports.payload FROM reports JOIN agents ON agents.id=reports.agent
+            SELECT reports.agent, agents.name, COALESCE(agents.machine,''), reports.payload FROM reports JOIN agents ON agents.id=reports.agent
             WHERE ($agent='' OR reports.agent=$agent) AND ($type='' OR json_extract(payload,'$.Format')=$type)
             AND ($status='' OR json_extract(payload,'$.Status')=$status) AND ($destination='' OR instr(lower(json_extract(payload,'$.Destination')),lower($destination))>0)
             AND ($user='' OR instr(lower(json_extract(payload,'$.User')),lower($user))>0)
-            AND reports.started >= $from AND reports.started < $to ORDER BY reports.started DESC,reports.id LIMIT 101 OFFSET $offset
+            AND reports.started >= $from AND reports.started < $to ORDER BY reports.started DESC,reports.id,reports.agent
             """;
-        command.Parameters.AddWithValue("$agent", agent ?? ""); command.Parameters.AddWithValue("$type", type ?? ""); command.Parameters.AddWithValue("$status", status ?? ""); command.Parameters.AddWithValue("$destination", destination ?? ""); command.Parameters.AddWithValue("$user", user ?? ""); command.Parameters.AddWithValue("$from", (from ?? DateTimeOffset.MinValue).UtcDateTime.ToString("O")); command.Parameters.AddWithValue("$to", (to ?? DateTimeOffset.MaxValue).UtcDateTime.ToString("O")); command.Parameters.AddWithValue("$offset", Math.Clamp(page, 0, 100000) * 100);
-        using var reader = command.ExecuteReader(); var result = new List<object>();
-        while (reader.Read()) result.Add(new { agent = reader.GetString(0), name = reader.GetString(1), report = JsonSerializer.Deserialize<CentralReport>(reader.GetString(2)) });
-        bool more = result.Count > 100; return new { rows = result.Take(100), more };
+        if (page.HasValue) command.CommandText += " LIMIT 101 OFFSET $offset";
+        command.Parameters.AddWithValue("$agent", agent ?? ""); command.Parameters.AddWithValue("$type", type ?? ""); command.Parameters.AddWithValue("$status", status ?? ""); command.Parameters.AddWithValue("$destination", destination ?? ""); command.Parameters.AddWithValue("$user", user ?? ""); command.Parameters.AddWithValue("$from", (from ?? DateTimeOffset.MinValue).UtcDateTime.ToString("O")); command.Parameters.AddWithValue("$to", (to ?? DateTimeOffset.MaxValue).UtcDateTime.ToString("O"));
+        if (page.HasValue) command.Parameters.AddWithValue("$offset", Math.Clamp(page.Value, 0, 100000) * 100);
+        using var reader = command.ExecuteReader();
+        while (reader.Read()) yield return new ReportRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), JsonSerializer.Deserialize<CentralReport>(reader.GetString(3)) ?? throw new InvalidDataException("Reporte vacio."));
     }
     internal bool Rename(string id, string name, string actor)
     {
