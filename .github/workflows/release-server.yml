@@ -1,0 +1,50 @@
+name: Publicar servidor e IIS
+on:
+  workflow_dispatch:
+  push:
+    branches: [iis]
+    paths:
+      - 'ProBackUp.Server/**'
+      - 'ProBackUp.Server.Config/**'
+      - 'ProBackUp.Shared/**'
+      - 'IISProBackUpServer/**'
+      - 'assets/**'
+      - 'build-server.ps1'
+      - 'build-iis.ps1'
+      - '.github/workflows/release-server.yml'
+permissions:
+  contents: write
+concurrency:
+  group: release-server
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.x'
+      - name: Compilar paquetes de servidor e IIS
+        shell: pwsh
+        run: ./build-iis.ps1 -SkipTests
+      - name: Publicar paquetes y huellas
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content ProBackUp.Server/ProBackUp.Server.csproj
+          $version = [string]$project.Project.PropertyGroup.Version | Where-Object { $_ }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version de servidor invalida.' }
+          $tag = 'server-v' + $version
+          gh release view $tag --repo $env:RELEASE_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output 'Esta version ya esta publicada; no se reemplazan sus archivos.'; exit 0 }
+          $notes = "Servidor ProBackUp $version. Incluye paquetes independientes para IIS y servicio Windows, con exportacion del historial a Excel. Use IISProBackUpServer.zip para IIS o ProBackUp-Server.zip para servicio Windows. No contiene certificados privados, credenciales ni datos locales. Fuente: rama iis."
+          gh release create $tag dist/IISProBackUpServer.zip dist/IISProBackUpServer.sha256 dist/ProBackUp-Server.zip dist/ProBackUp-Server.sha256 --repo $env:RELEASE_REPOSITORY --target $env:RELEASE_COMMIT --title "ProBackUp Server $version (IIS y servicio Windows)" --notes $notes --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo publicar la version del servidor.' }
