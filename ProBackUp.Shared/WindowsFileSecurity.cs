@@ -121,7 +121,8 @@ internal static class WindowsFileSecurity
         {
             if (rule.AccessControlType != AccessControlType.Allow || trusted.Contains((SecurityIdentifier)rule.IdentityReference)) continue;
             if (rule.IdentityReference.Value == "S-1-3-0" && (rule.PropagationFlags & PropagationFlags.InheritOnly) != 0) continue;
-            var read = FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize;
+            // Windows retains GENERIC_READ / GENERIC_EXECUTE on inherited ACEs.
+            var read = FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize | unchecked((FileSystemRights)0xA0000000);
             if (publicRead && (rule.FileSystemRights & ~read) == 0) continue;
             throw new UnauthorizedAccessException("Existen permisos para otras cuentas. T.I. debe revisar la carpeta antes de adoptarla.");
         }

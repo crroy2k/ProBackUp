@@ -38,6 +38,15 @@ internal static class SecurityRegression
             try { WindowsFileSecurity.CheckAccess(broad, [identity.User!, WindowsFileSecurity.Administrators, new SecurityIdentifier("S-1-5-18")], false); }
             catch (UnauthorizedAccessException) { accessRejected = true; }
             check(accessRejected, "La adopción rechaza accesos amplios de otras cuentas antes de guardar secretos");
+            var inheritedRead = new DirectorySecurity();
+            inheritedRead.SetSecurityDescriptorSddlForm("D:(A;OICIIO;GRGX;;;BU)");
+            WindowsFileSecurity.CheckAccess(inheritedRead, [identity.User!, WindowsFileSecurity.Administrators, new SecurityIdentifier("S-1-5-18")], true);
+            check(true, "La instalación acepta lectura y ejecución genéricas heredadas de Archivos de programa");
+            bool genericWriteRejected = false;
+            inheritedRead.SetSecurityDescriptorSddlForm("D:(A;OICIIO;GRGX;;;BU)(A;;GW;;;BU)");
+            try { WindowsFileSecurity.CheckAccess(inheritedRead, [identity.User!, WindowsFileSecurity.Administrators, new SecurityIdentifier("S-1-5-18")], true); }
+            catch (UnauthorizedAccessException) { genericWriteRejected = true; }
+            check(genericWriteRejected, "La instalación sigue rechazando escritura genérica de otras cuentas");
             var file = Path.Combine(fixture, "single.txt"); System.IO.File.WriteAllText(file, "fixture");
             using (var handle = WindowsFileSecurity.Open(file, false))
             {
