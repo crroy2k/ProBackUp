@@ -178,21 +178,18 @@ public sealed class MainForm : Form
     }
     private async Task UpdateClient()
     {
-        string? installer = null;
+        bool update = false;
         await Busy(async token =>
         {
             status.Text = "Buscando una versión del cliente en GitHub…";
-            using var client = ClientUpdates.Client(); var release = await ClientUpdates.Latest(client, token);
+            using var client = ClientUpdates.Client();
+            var release = await ClientUpdates.Latest(client, token);
             if (release == null) { Info("Todavía no hay una versión estable del cliente publicada en GitHub Releases."); return; }
             if (release.Version <= ClientUpdates.Current) { Info("ProBackUp está actualizado. Versión instalada: " + ClientUpdates.Current.ToString(3)); return; }
-            if (MessageBox.Show(this, $"Está disponible ProBackUp {release.Version}. ¿Descargar la actualización?", "Actualizar ProBackUp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            var cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProBackUp", "updates");
-            var downloaded = await ClientUpdates.Download(client, release, cache, Progress(), token);
-            if (MessageBox.Show(this, "Instalador descargado y verificado. ¿Instalar ahora? ProBackUp se cerrará y Windows pedirá permisos de administrador para actualizar la aplicación y el servicio.", "Instalar actualización", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) installer = downloaded;
-            else status.Text = "Actualización descargada: " + downloaded;
+            update = MessageBox.Show(this, $"Está disponible ProBackUp {release.Version}. ¿Descargar e instalar? Windows pedirá permisos de administrador y la descarga se verificará en una carpeta protegida.",
+                "Actualizar ProBackUp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
         });
-        if (installer == null) return;
-        Guard(() => { using var process = ClientUpdates.StartInstaller(installer); exiting = true; Close(); });
+        if (update) Guard(() => { using var process = ClientUpdates.StartUpdater(); exiting = true; Close(); });
     }
     private MailSettings ReadMail()
     {

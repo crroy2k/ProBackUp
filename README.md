@@ -14,4 +14,6 @@ Los ejecutables y paquetes se generan en `dist/` y no estan versionados.
 
 Las ramas `cliente`, `server` e `iis` contienen unicamente su componente y sus dependencias. `main` conserva el proyecto integrado. No se incluyen certificados, credenciales ni datos locales.
 
-Cliente 3.4.0: interfaz sin elevacion, tareas con la sesion del usuario y actualizaciones desde GitHub Releases. Consulta [instalacion y actualizaciones](docs/cliente-actualizaciones.md).
+Cliente 3.4.3: interfaz sin elevacion, tareas con la sesion del usuario y actualizaciones desde GitHub Releases. Consulta [instalacion y actualizaciones](docs/cliente-actualizaciones.md).
+
+Version de seguridad 3.4.3. Consulta las notas del componente incluidas en este repositorio.

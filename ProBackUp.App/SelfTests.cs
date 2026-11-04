@@ -112,6 +112,15 @@ public static class SelfTests
             await RemoteControlTests.Run(root, Assert);
             await UserSessionTests.Run(root, Assert);
             await ClientUpdateTests.Run(root, Assert);
+            ProBackUp.Security.SecurityRegression.Check(root, Assert);
+            using (var excessive = new MemoryStream(new byte[32]))
+            using (var bounded = new MemoryStream())
+            {
+                bool rejected = false;
+                try { await BackupEngine.CopyVerified(excessive, bounded, new FileEntry("fixture.bin", 1, new string('0', 64)), default); }
+                catch (InvalidDataException) { rejected = true; }
+                Assert(rejected && bounded.Length == 0, "La restauración rechaza un flujo mayor al manifiesto antes de escribir datos excesivos");
+            }
             await UploadBandwidthTests.Run(root, Assert);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(report))!); await File.WriteAllTextAsync(report, string.Join(Environment.NewLine, results) + Environment.NewLine + "ALL TESTS PASSED");
         }

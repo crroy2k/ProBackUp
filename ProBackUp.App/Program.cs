@@ -11,6 +11,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            if (args.Length == 2 && args[0] == "--security-test") { ProBackUp.Security.SecurityRegression.Run(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--self-test") { SelfTests.Run(args[1]).GetAwaiter().GetResult(); return 0; }
             if (args.Length == 2 && args[0] == "--tray-test") { TrayTests.Run(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--restore-test") { RestoreTests.Run(args[1]); return 0; }
@@ -44,7 +45,7 @@ internal static class Program
         {
             if (args.Length > 0)
             {
-                var path = args.Length == 2 && args[0] is "--self-test" or "--tray-test" or "--restore-test" ? args[1] : Path.Combine(Store.Root, "last-error.txt");
+                var path = args.Length == 2 && args[0] is "--self-test" or "--tray-test" or "--restore-test" or "--security-test" ? args[1] : Path.Combine(Store.Root, "last-error.txt");
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); File.WriteAllText(path, ex.ToString());
             }
             else MessageBox.Show(ex.Message, "ProBackUp", MessageBoxButtons.OK, MessageBoxIcon.Error);

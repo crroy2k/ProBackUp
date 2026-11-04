@@ -1,4 +1,4 @@
-﻿ProBackUp 3.4.2 — Windows 10/11 x64
+﻿ProBackUp 3.4.3 — Windows 10/11 x64
 
 BUSCADOR Y FILTROS POR DÍA
 En Versiones de archivos, elige el día y la hora. Buscar archivo encuentra nombres
@@ -188,7 +188,7 @@ Corrige el error Windows 1346 al ejecutar la interfaz como administrador. El acc
 
 ACTUALIZACIONES DEL CLIENTE
 Configuración > Buscar actualizaciones consulta GitHub Releases en crroy2k/ProBackUp.
-Descarga el instalador, comprueba SHA-256 y solicita confirmación para instalar con UAC.
+Tras confirmar, el ayudante instalado solicita UAC, descarga en Program Files y verifica SHA-256 antes de abrir el instalador.
 El servicio y la interfaz usan la cuenta del usuario asignado en la instalación.
 
 VELOCIDAD DE SUBIDA (Mbps)
@@ -202,3 +202,6 @@ Al editar una tarea se muestra Cambios pendientes de aplicar.
 Pulsa Aplicar cambios: al guardar correctamente mostrara Configuracion aplicada.
 Cerrar solicita confirmacion si quedan cambios sin aplicar. No requiere administrador.
 Los cambios se usan en la proxima ejecucion; no alteran un respaldo en curso.
+
+SEGURIDAD 3.4.3
+Actualizaciones descargadas por el ayudante elevado en Program Files, datos con propietario validado, herramientas Windows mediante rutas absolutas y restauracion con directorios fijados y transferencia verificada. Las carpetas con propietarios ajenos o enlaces fisicos requieren revision de T.I.
