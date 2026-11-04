@@ -214,6 +214,19 @@ public static class BackupEngine
         }
         if (count != expected.Bytes || !Convert.ToHexString(sha.GetHashAndReset()).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Verificación SHA-256 fallida: " + expected.Path);
     }
+    internal static async Task CopyVerified(Stream input, Stream output, FileEntry expected, CancellationToken token)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[131072]; long count = 0; int read;
+        while ((read = await input.ReadAsync(buffer, token)) > 0)
+        {
+            if (read > expected.Bytes - count) throw new InvalidDataException("Tamaño alterado: " + expected.Path);
+            count += read; hash.AppendData(buffer, 0, read);
+            await output.WriteAsync(buffer.AsMemory(0, read), token);
+        }
+        if (count != expected.Bytes || !Convert.ToHexString(hash.GetHashAndReset()).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Verificación SHA-256 fallida: " + expected.Path);
+    }
     private static async Task VerifyZip(string path, BackupManifest manifest, CancellationToken cancel)
     {
         ValidateManifest(manifest);
@@ -244,43 +257,37 @@ public static class BackupEngine
         if (!Path.IsPathFullyQualified(destination)) throw new ArgumentException("El destino debe ser absoluto.");
         NoLinks(artifact); NoLinks(destination);
         if (Within(destination, artifact) || Within(artifact, destination)) throw new IOException("Restaura en una carpeta fuera del respaldo.");
-        Directory.CreateDirectory(destination);
-        var final = Path.Combine(destination, "Restaurado-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
-        var staging = final + ".partial";
-        try
+        using var workspace = new RestoreWorkspace(destination, "Restaurado-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N"));
+        var manifest = backup.Manifest;
+        if (backup.Kind == BackupKind.FullZip)
         {
-            BackupManifest manifest = backup.Manifest;
-            if (backup.Kind == BackupKind.FullZip)
+            using var zip = ZipFile.OpenRead(artifact);
+            progress?.Report("Verificando integridad antes de restaurar…");
+            await VerifyZip(artifact, manifest, cancel);
+            foreach (var directory in manifest.Directories) workspace.Directory(directory);
+            foreach (var entry in manifest.Files)
             {
-                using var zip = ZipFile.OpenRead(artifact);
-                progress?.Report("Verificando integridad antes de restaurar…"); await VerifyZip(artifact, manifest, cancel);
-                Directory.CreateDirectory(staging);
-                foreach (var d in manifest.Directories) Directory.CreateDirectory(SafePath(staging, d));
-                foreach (var entry in manifest.Files)
-                {
-                    cancel.ThrowIfCancellationRequested(); progress?.Report("Restaurando: " + entry.Path);
-                    var target = SafePath(staging, entry.Path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    await using var input = zip.GetEntry("data/" + entry.Path)!.Open(); await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                    await input.CopyToAsync(output, cancel);
-                }
+                cancel.ThrowIfCancellationRequested(); progress?.Report("Restaurando: " + entry.Path);
+                await using var input = zip.GetEntry("data/" + entry.Path)!.Open();
+                await using var output = workspace.File(entry.Path);
+                await CopyVerified(input, output, entry, cancel);
             }
-            else
-            {
-                var mp = Path.Combine(artifact, ManifestName); NoLinks(mp);
-                await VerifyFolder(artifact, manifest, cancel); Directory.CreateDirectory(staging);
-                foreach (var d in manifest.Directories) Directory.CreateDirectory(SafePath(staging, d));
-                foreach (var entry in manifest.Files)
-                {
-                    cancel.ThrowIfCancellationRequested(); progress?.Report("Restaurando: " + entry.Path);
-                    var target = SafePath(staging, entry.Path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    var source = SafePath(Path.Combine(artifact, "data"), entry.Path); NoLinks(source);
-                    await using var input = File.OpenRead(source); await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None); await input.CopyToAsync(output, cancel);
-                }
-            }
-            // Verify the restored bytes as well; the source can change after preflight.
-            foreach (var entry in manifest.Files) { await using var stream = File.OpenRead(SafePath(staging, entry.Path)); await Check(stream, entry, cancel); }
-            Directory.Move(staging, final); return final;
         }
-        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+        else
+        {
+            var mp = Path.Combine(artifact, ManifestName); NoLinks(mp);
+            await VerifyFolder(artifact, manifest, cancel);
+            foreach (var directory in manifest.Directories) workspace.Directory(directory);
+            foreach (var entry in manifest.Files)
+            {
+                cancel.ThrowIfCancellationRequested(); progress?.Report("Restaurando: " + entry.Path);
+                var source = SafePath(Path.Combine(artifact, "data"), entry.Path); NoLinks(source);
+                await using var input = File.OpenRead(source);
+                await using var output = workspace.File(entry.Path);
+                await CopyVerified(input, output, entry, cancel);
+            }
+        }
+        foreach (var entry in manifest.Files) { await using var stream = workspace.Read(entry.Path); await Check(stream, entry, cancel); }
+        return workspace.Publish();
     }
 }

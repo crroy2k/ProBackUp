@@ -60,7 +60,7 @@ foreach ($other in Get-Website | Where-Object {$_.Name -ne $SiteName}) {
 if (@(Get-WebApplication | Where-Object {$_.ApplicationPool -eq $PoolName}).Count -gt 0) {throw 'El pool esta compartido con una aplicacion ajena.'}
 New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 Set-Content -LiteralPath (Join-Path $InstallRoot '.probackup-iis-install') -Value 'ProBackUpIIS'
-$release = Join-Path $InstallRoot ('releases\3.4.0-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
+$release = Join-Path $InstallRoot ('releases\3.5.2-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
 Assert-NoLinks $release
 New-Item -ItemType Directory -Path $release -Force | Out-Null
 Copy-Item -Path (Join-Path $PSScriptRoot 'sitio\*') -Destination $release -Recurse
@@ -73,6 +73,7 @@ $original = if ($oldState) {$oldState | ConvertTo-Json | ConvertFrom-Json} else 
 if(-not $wasIisActive){$original.StartMode=$service.StartMode;$original.Delayed=$delayed;$original.WasRunning=$wasRunning}
 $iisBackup = 'ProBackUp-before-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N')
 Backup-WebConfiguration -Name $iisBackup
+$securityBackend=Join-Path $PSScriptRoot 'Backend\ProBackUp.Server.exe'
 $createdSite = $false; $createdPool = $false; $identity = $null; $rule = $null; $createdFirewall = $false
 $firewallName='ProBackUp-IIS-HTTPS'
 $existingFirewall=Get-NetFirewallRule -Name $firewallName -ErrorAction SilentlyContinue
@@ -97,7 +98,10 @@ try {
     $identity = New-Object Security.Principal.NTAccount ('IIS AppPool\'+$PoolName)
     $sid = $identity.Translate([Security.Principal.SecurityIdentifier])
     $rule = New-Object Security.AccessControl.FileSystemAccessRule($sid,'Modify','ContainerInherit,ObjectInherit','None','Allow')
-    $acl=Get-Acl -LiteralPath $dataRoot; $acl.AddAccessRule($rule); Set-Acl -LiteralPath $dataRoot -AclObject $acl
+    $securityBackend=Join-Path $PSScriptRoot 'Backend\ProBackUp.Server.exe'
+    Assert-NoLinks $securityBackend
+    & $securityBackend --secure-data ('IIS APPPOOL\'+$PoolName)
+    if($LASTEXITCODE -ne 0){throw 'No se pudieron proteger los datos. Revise propietario, permisos y archivos abiertos.'}
     $read=New-Object Security.AccessControl.FileSystemAccessRule($sid,'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow')
     $acl=Get-Acl -LiteralPath $InstallRoot; $acl.AddAccessRule($read); Set-Acl -LiteralPath $InstallRoot -AclObject $acl
     if (-not $site) {New-Website -Name $SiteName -PhysicalPath $release -ApplicationPool $PoolName -Port $HttpsPort -HostHeader $HostName -Ssl -SslFlags 1 | Out-Null; $createdSite=$true}
@@ -145,7 +149,7 @@ try {
         if ($createdFirewall) {Remove-NetFirewallRule -Name $firewallName}
         elseif($existingFirewall -and -not $firewallWasEnabled){Disable-NetFirewallRule -InputObject $existingFirewall}
         if (-not $wasIisActive) {
-            if ($rule) {$acl=Get-Acl -LiteralPath $dataRoot; $acl.RemoveAccessRuleSpecific($rule); Set-Acl -LiteralPath $dataRoot -AclObject $acl}
+            if ($rule) {& $securityBackend --secure-data --retire-pool $sid.Value; if($LASTEXITCODE -ne 0){throw 'No se pudieron retirar los permisos de la migracion.'}}
             $marker=Join-Path $dataRoot 'iis-hosting.json'; if(Test-Path -LiteralPath $marker){Remove-Item -LiteralPath $marker}
             if($oldState){$oldState | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8}elseif(Test-Path -LiteralPath $statePath){Remove-Item -LiteralPath $statePath}
             Set-ServiceStartup $original.StartMode $original.Delayed

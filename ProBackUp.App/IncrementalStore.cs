@@ -82,45 +82,45 @@ public static class IncrementalStore
     {
         var manifest = await BackupArchive.ReadManifest(artifact, token); var repo = Repository(artifact, manifest);
         if (!Path.IsPathFullyQualified(destination) || BackupEngine.Within(destination, repo) || BackupEngine.Within(repo, destination)) throw new IOException("Elige un destino de restauración fuera del repositorio.");
-        BackupEngine.NoLinks(destination); Directory.CreateDirectory(destination);
         var files = onlyFile == null ? manifest.Files : manifest.Files.Where(f => f.Path == onlyFile).ToList();
         if (onlyFile != null && files.Count != 1) throw new IOException("El archivo no existe en esta versión.");
-        var final = Path.Combine(destination, "Restaurado-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]); var staging = final + ".partial";
-        try
+        using var workspace = new RestoreWorkspace(destination, "Restaurado-" + Guid.NewGuid().ToString("N"));
+        if (onlyFile == null) foreach (var directory in manifest.Directories) workspace.Directory(directory);
+        foreach (var entry in files)
         {
-            Directory.CreateDirectory(staging);
-            if (onlyFile == null) foreach (var dir in manifest.Directories) Directory.CreateDirectory(BackupEngine.SafePath(staging, dir));
-            foreach (var entry in files)
-            {
-                token.ThrowIfCancellationRequested(); progress?.Report("Restaurando versión: " + entry.Path);
-                var obj = ObjectPath(repo, entry); BackupEngine.NoLinks(obj);
-                var target = BackupEngine.SafePath(staging, entry.Path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                await using (var input = File.OpenRead(obj)) await using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None)) await input.CopyToAsync(output, token);
-                await using var verify = File.OpenRead(target); await BackupEngine.Check(verify, entry, token);
-            }
-            Directory.Move(staging, final); return final;
+            token.ThrowIfCancellationRequested(); progress?.Report("Restaurando versión: " + entry.Path);
+            var obj = ObjectPath(repo, entry); BackupEngine.NoLinks(obj);
+            await using (var input = File.OpenRead(obj))
+            await using (var output = workspace.File(entry.Path))
+                await BackupEngine.CopyVerified(input, output, entry, token);
+            await using var verify = workspace.Read(entry.Path);
+            await BackupEngine.Check(verify, entry, token);
         }
-        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+        return workspace.Publish();
     }
     public static async Task<string> RestoreFile(string artifact, string file, string destination, CancellationToken token)
     {
         using var gate = Store.Acquire();
         if ((await BackupArchive.Inspect(artifact, token)).Kind == BackupKind.Incremental) return await Restore(artifact, destination, file, null, token);
-        var manifest = await BackupArchive.ReadManifest(artifact, token); var entry = manifest.Files.Single(f => f.Path == file);
-        BackupEngine.NoLinks(destination);
+        var manifest = await BackupArchive.ReadManifest(artifact, token);
+        var entry = manifest.Files.Single(f => f.Path == file);
         if (!Path.IsPathFullyQualified(destination) || BackupEngine.Within(destination, artifact) || BackupEngine.Within(artifact, destination)) throw new IOException("Elige otra carpeta para restaurar.");
-        Directory.CreateDirectory(destination); var final = Path.Combine(destination, "Archivo-" + Guid.NewGuid().ToString("N")); var staging = final + ".partial";
-        try
+        using var workspace = new RestoreWorkspace(destination, "Archivo-" + Guid.NewGuid().ToString("N"));
+        if (File.Exists(artifact))
         {
-            Directory.CreateDirectory(staging); var target = BackupEngine.SafePath(staging, entry.Path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            if (File.Exists(artifact))
-            { using var zip = ZipFile.OpenRead(artifact); await using var input = zip.GetEntry("data/" + entry.Path)!.Open(); await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None); await input.CopyToAsync(output, token); }
-            else
-            { var source = BackupEngine.SafePath(Path.Combine(artifact, "data"), entry.Path); BackupEngine.NoLinks(source); File.Copy(source, target); }
-            await using (var verify = File.OpenRead(target)) await BackupEngine.Check(verify, entry, token);
-            Directory.Move(staging, final); return final;
+            using var zip = ZipFile.OpenRead(artifact);
+            await using var input = zip.GetEntry("data/" + entry.Path)!.Open();
+            await using var output = workspace.File(entry.Path);
+            await BackupEngine.CopyVerified(input, output, entry, token);
         }
-        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+        else
+        {
+            var source = BackupEngine.SafePath(Path.Combine(artifact, "data"), entry.Path); BackupEngine.NoLinks(source);
+            await using var input = File.OpenRead(source);
+            await using var output = workspace.File(entry.Path);
+            await BackupEngine.CopyVerified(input, output, entry, token);
+        }
+        await using (var verify = workspace.Read(entry.Path)) await BackupEngine.Check(verify, entry, token);
+        return workspace.Publish();
     }
 }
-

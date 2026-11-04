@@ -1,4 +1,4 @@
-# ProBackUp Server para IIS · 3.4.0
+# ProBackUp Server para IIS · 3.5.2
 
 Este paquete aloja la aplicación **directamente dentro de IIS** mediante ASP.NET Core Module V2, en proceso (`w3wp.exe`). IIS termina HTTPS; no se necesita ARR ni un puerto Kestrel detrás. El servicio independiente queda detenido y deshabilitado para impedir dos instancias. La configuración, usuarios AD, claves de clientes, historial y base SQLite siguen en `C:\ProgramData\ProBackUpServer`, fuera del sitio web.
 
@@ -75,10 +75,10 @@ El servicio se detiene antes de que IIS utilice ese puerto. Decide el puerto ant
 & 'D:\Descargas\IISProBackUpServer\Verificar-IIS.ps1'
 ```
 
-Apunta DNS al IIS y abre el panel por HTTPS. Entra con un usuario AD permitido, revisa equipos/reportes y prueba un envío de un cliente. Si cambiaste de 8445 a 443, en cada cliente sal de ProBackUp desde la bandeja y ejecuta como administrador:
+Apunta DNS al IIS y abre el panel por HTTPS. Entra con un usuario AD permitido, revisa equipos/reportes y prueba un envío de un cliente. Si cambiaste de 8445 a 443, en cada cliente sal de ProBackUp desde la bandeja y ejecuta sin elevar, en la sesión del propietario registrado:
 
 ```powershell
-& 'D:\Descargas\IISProBackUpServer\Actualizar-URL-Cliente.ps1' -Url 'https://probackup.coopeagri.local/'
+& 'X:\IA\ProBackUp\IISProBackUpServer\Actualizar-URL-Cliente.ps1' -Url 'https://probackup.coopeagri.local/'
 ```
 
 El ayudante valida HTTPS sin enviar la clave, mantiene el token cifrado y no altera tareas ni contraseñas. Solo permite cambiar el puerto del mismo DNS. Conserva una copia protegida de settings.json. El servicio del cliente puede seguir activo si no está ejecutando un respaldo/restauración; si está ocupado, repite al finalizar. Conservar el mismo nombre DNS y la misma base mantiene las claves de los agentes.
@@ -106,3 +106,7 @@ La instalación guarda un respaldo de configuración de IIS con nombre `ProBackU
 La publicación se construye y las pruebas del backend se ejecutan con directorio simulado y HTTPS local. Los scripts y XML se validan sin modificar IIS. **La instalación nativa, el binding y el login AD deben verificarse en tu IIS**; este paquete no se ha desplegado automáticamente en el servidor actual ni supone una prueba de carga o alta disponibilidad.
 
 Fuentes: [IIS con ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/), [alojamiento en proceso](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/in-process-hosting), [Hosting Bundle](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/hosting-bundle).
+
+## Permisos de datos en 3.5.2
+
+La migración y la reversión revisan propietarios y enlaces y reconcilian los permisos de los datos mientras los procesos están detenidos. Los archivos con propietarios inesperados, enlaces físicos o accesos incompatibles requieren revisión de T.I. Los usuarios y reportes existentes se conservan.

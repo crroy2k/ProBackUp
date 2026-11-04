@@ -1,7 +1,12 @@
 ﻿#Requires -Version 5.1
-#Requires -RunAsAdministrator
 param([string]$Url='https://probackup.coopeagri.local/')
 . (Join-Path $PSScriptRoot 'Comun.ps1')
+$currentIdentity=[Security.Principal.WindowsIdentity]::GetCurrent()
+$currentPrincipal=New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+if($currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Ejecuta este ayudante sin elevar, desde la sesion del propietario del cliente.'}
+$owner=(Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\ProBackUp\Client' -Name OwnerSid -ErrorAction Stop).OwnerSid
+if($currentIdentity.User.Value -ne $owner){throw 'Solo el propietario registrado del cliente puede cambiar su configuracion.'}
+
 $next=$null
 if(-not [Uri]::TryCreate($Url,[UriKind]::Absolute,[ref]$next) -or $next.Scheme -ne 'https' -or $next.HostNameType -ne [UriHostNameType]::Dns -or $next.UserInfo -or $next.AbsolutePath -ne '/' -or $next.Query -or $next.Fragment){throw 'Indica una URL HTTPS con nombre DNS y sin rutas ni parametros.'}
 if(@(Get-CimInstance Win32_Process -Filter "Name='ProBackUp.exe'" | Where-Object {$_.SessionId -ne 0}).Count -gt 0){throw 'Sal de ProBackUp desde la bandeja antes de cambiar la URL. El servicio puede seguir activo.'}

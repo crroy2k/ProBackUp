@@ -10,7 +10,7 @@ internal static class ClientUpdates
 {
     internal const string Repository = "crroy2k/ProBackUp";
     internal const string InstallerName = "ProBackUp-Setup.exe";
-    internal static Version Current => typeof(Program).Assembly.GetName().Version!;
+    internal static Version Current => typeof(ClientUpdates).Assembly.GetName().Version!;
     internal static HttpClient Client()
     {
         var client = new HttpClient(new HttpClientHandler { CheckCertificateRevocationList = true }) { Timeout = TimeSpan.FromMinutes(10) };
@@ -66,7 +66,7 @@ internal static class ClientUpdates
         using var checksum = await client.GetAsync(release.Checksums, HttpCompletionOption.ResponseHeadersRead, token); checksum.EnsureSuccessStatusCode();
         var expected = ExpectedHash(Encoding.UTF8.GetString(await Limited(checksum.Content, 65536, token)));
         if (release.Digest.Length > 0 && !release.Digest.Equals("sha256:" + expected, StringComparison.OrdinalIgnoreCase)) throw new IOException("La huella de GitHub no coincide con el archivo de verificación.");
-        BackupEngine.NoLinks(cache); Directory.CreateDirectory(cache);
+        using var cacheGuard = new ProBackUp.Security.DirectoryGuard(); cacheGuard.Create(cache);
         var directory = Path.Combine(cache, Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory); var path = Path.Combine(directory, InstallerName);
         try
         {
@@ -88,5 +88,14 @@ internal static class ClientUpdates
         }
         catch { if (File.Exists(path)) File.Delete(path); Directory.Delete(directory); throw; }
     }
-    internal static Process StartInstaller(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, Verb = "runas" }) ?? throw new IOException("No se pudo abrir el instalador.");
+    internal static Process StartUpdater()
+    {
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ProBackUp", "Uninstall.exe");
+        using var guard = new ProBackUp.Security.DirectoryGuard(); guard.Hold(Path.GetDirectoryName(path)!);
+        if (!File.Exists(path) || !Version.TryParse(FileVersionInfo.GetVersionInfo(path).FileVersion, out var version) || version < new Version(3, 4, 3))
+            throw new IOException("Instala el paquete completo de ProBackUp 3.4.3 o posterior para habilitar la actualización protegida.");
+        var start = new ProcessStartInfo(path) { UseShellExecute = true, Verb = "runas", WorkingDirectory = Path.GetDirectoryName(path) };
+        start.ArgumentList.Add("--update-client");
+        return Process.Start(start) ?? throw new IOException("No se pudo abrir el actualizador protegido.");
+    }
 }

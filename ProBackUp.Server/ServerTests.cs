@@ -24,6 +24,7 @@ internal static class ServerTests
         await using var app = Program.Build(config, new TestDirectory(), cert, true);
         try
         {
+            ProBackUp.Security.SecurityRegression.Check(root, Check);
             Check(!Program.IisMode(null, "ProBackUp.Server") && Program.IisMode("IIS", "w3wp"), "Selecciona alojamiento IIS nativo sin alterar el servicio independiente");
             bool invalidIis = false; try { Program.IisMode("IIS", "ProBackUp.Server"); } catch (InvalidOperationException) { invalidIis = true; }
             Check(invalidIis, "Rechaza activar modo IIS fuera de IIS, sin abrir HTTP alternativo");

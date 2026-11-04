@@ -70,7 +70,7 @@ SCM con cuenta virtual y carga prolongada pendiente; no se desplegó en esta ses
 
 
 EJECUCIÓN DESDE EL SERVIDOR (3.2)
-En el panel central: Administración > cliente > Respaldar > seleccionar tarea > Ejecutar respaldo ahora. Requiere cliente 3.3, conexión al servidor activada y servicio ProBackUpService en ejecución. Recoge órdenes cada 15 segundos, espera si hay una operación local y caduca solicitudes aún no recogidas a las 24 horas; las que esperan sesión se conservan hasta que el usuario vuelva. Los reintentos no duplican copias. Solo un administrador del panel puede solicitar respaldos. Configuración > Buscar actualizaciones descarga versiones estables del cliente desde GitHub Releases y verifica su SHA-256 antes de iniciar el instalador con UAC.
+En el panel central: Administración > cliente > Respaldar > seleccionar tarea > Ejecutar respaldo ahora. Requiere cliente 3.3, conexión al servidor activada y servicio ProBackUpService en ejecución. Recoge órdenes cada 15 segundos, espera si hay una operación local y caduca solicitudes aún no recogidas a las 24 horas; las que esperan sesión se conservan hasta que el usuario vuelva. Los reintentos no duplican copias. Solo un administrador del panel puede solicitar respaldos. Configuración > Buscar actualizaciones busca versiones estables del cliente y abre el ayudante instalado con UAC. Ese ayudante descarga y verifica SHA-256 dentro de Program Files.
 
 
 EJECUCIÓN CON SESIÓN DE WINDOWS (3.3)

@@ -34,7 +34,7 @@ function Assert-Package {
 function Set-ServiceStartup([string]$Mode, [bool]$Delayed) {
     $kind = switch ($Mode) { 'Auto' {'Automatic'} 'Manual' {'Manual'} 'Disabled' {'Disabled'} default {throw 'Inicio de servicio invalido.'} }
     Set-Service -Name ProBackUpServer -StartupType $kind
-    if ($Mode -eq 'Auto' -and $Delayed) { & sc.exe config ProBackUpServer start= delayed-auto | Out-Null; if ($LASTEXITCODE -ne 0) {throw 'No se pudo restablecer el inicio diferido.'} }
+    if ($Mode -eq 'Auto' -and $Delayed) { & (Join-Path ([Environment]::GetFolderPath('System')) 'sc.exe') config ProBackUpServer start= delayed-auto | Out-Null; if ($LASTEXITCODE -ne 0) {throw 'No se pudo restablecer el inicio diferido.'} }
 }
 function Test-LocalHttps([string]$HostName,[int]$Port) {
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue

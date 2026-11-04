@@ -19,6 +19,12 @@ internal static class Program
         try
         {
             if (args.Length == 3 && args[0] == "--self-test") { SelfTest(args[1], args[2]); return 0; }
+            if (args.SequenceEqual(["--update-client"])) { Application.Run(new UpdateForm()); return 0; }
+            if (args.Length == 2 && args[0] == "--wait-for-updater" && int.TryParse(args[1], out var updaterPid))
+            {
+                try { using var updater = Process.GetProcessById(updaterPid); if (!updater.WaitForExit(30000)) throw new IOException("El actualizador anterior no terminó."); } catch (ArgumentException) { }
+                args = [];
+            }
             if (args.SequenceEqual(["--repair-service"])) { ServiceSetup.Configure(InstallPath); MessageBox.Show("Servicio reparado. La interfaz y los respaldos usan la cuenta del usuario del escritorio.", "ProBackUp"); return 0; }
             if (args.SequenceEqual(["--uninstall"])) { Uninstall(); return 0; }
             if (args.Length > 0) throw new ArgumentException("Argumentos no reconocidos.");
@@ -64,7 +70,7 @@ internal static class Program
             }
             if (!File.Exists(Path.Combine(stage, "ProBackUp.exe"))) throw new IOException("Falta ProBackUp.exe.");
             File.Copy(test ? testInstaller ?? throw new ArgumentException("Falta el instalador de prueba.") : Environment.ProcessPath!, Path.Combine(stage, "Uninstall.exe"));
-            File.WriteAllText(Path.Combine(stage, ".probackup-install.json"), JsonSerializer.Serialize(new { product = "ProBackUp", version = "3.4.2", path = Path.GetFullPath(target) }));
+            File.WriteAllText(Path.Combine(stage, ".probackup-install.json"), JsonSerializer.Serialize(new { product = "ProBackUp", version = "3.4.3", path = Path.GetFullPath(target) }));
             // Fail before touching an existing installation if a binary is in use.
             foreach (var name in OwnedFiles)
             {
@@ -72,6 +78,7 @@ internal static class Program
                 if (File.Exists(path)) { using var check = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None); }
             }
             Directory.CreateDirectory(target);
+            if (!test) ProBackUp.Security.WindowsFileSecurity.SecureTree(target, [], [new System.Security.Principal.SecurityIdentifier("S-1-5-32-545")]);
             // Keep exact previous owned files until registration succeeds.
             var previous = Path.Combine(stage, "previous"); Directory.CreateDirectory(previous);
             var installed = new List<string>();
@@ -120,7 +127,7 @@ internal static class Program
     public static void Register(string target, bool desktop)
     {
         using var registry = Registry.LocalMachine.CreateSubKey(RegistryPath);
-        registry.SetValue("DisplayName", "ProBackUp"); registry.SetValue("DisplayVersion", "3.4.2"); registry.SetValue("Publisher", "ProBackUp"); registry.SetValue("InstallLocation", target); registry.SetValue("DisplayIcon", Path.Combine(target, "ProBackUp.exe")); registry.SetValue("UninstallString", $"\"{Path.Combine(target, "Uninstall.exe")}\" --uninstall"); registry.SetValue("NoModify", 1, RegistryValueKind.DWord); registry.SetValue("NoRepair", 1, RegistryValueKind.DWord); registry.SetValue("EstimatedSize", (int)(OwnedFiles.Where(n => File.Exists(Path.Combine(target, n))).Sum(n => new FileInfo(Path.Combine(target, n)).Length) / 1024), RegistryValueKind.DWord);
+        registry.SetValue("DisplayName", "ProBackUp"); registry.SetValue("DisplayVersion", "3.4.3"); registry.SetValue("Publisher", "ProBackUp"); registry.SetValue("InstallLocation", target); registry.SetValue("DisplayIcon", Path.Combine(target, "ProBackUp.exe")); registry.SetValue("UninstallString", $"\"{Path.Combine(target, "Uninstall.exe")}\" --uninstall"); registry.SetValue("NoModify", 1, RegistryValueKind.DWord); registry.SetValue("NoRepair", 1, RegistryValueKind.DWord); registry.SetValue("EstimatedSize", (int)(OwnedFiles.Where(n => File.Exists(Path.Combine(target, n))).Sum(n => new FileInfo(Path.Combine(target, n)).Length) / 1024), RegistryValueKind.DWord);
         Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ProBackUp", "ProBackUp.lnk"), Path.Combine(target, "ProBackUp.exe"));
         Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ProBackUp", "Desinstalar ProBackUp.lnk"), Path.Combine(target, "Uninstall.exe"));
         // The uninstaller shortcut must carry its mode argument.
@@ -143,7 +150,7 @@ internal static class Program
         // Delete only the explicitly owned executable after this process exits; never recurse.
         string Quote(string s) => "'" + s.Replace("'", "''") + "'";
         var script = $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; Remove-Item -LiteralPath {Quote(Path.Combine(target, "Uninstall.exe"))} -Force; if ((Test-Path -LiteralPath {Quote(target)}) -and -not (Get-ChildItem -LiteralPath {Quote(target)} -Force)) {{ Remove-Item -LiteralPath {Quote(target)} }}";
-        var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")) { UseShellExecute = false, CreateNoWindow = true };
         foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) }) start.ArgumentList.Add(arg);
         Process.Start(start); MessageBox.Show("ProBackUp se desinstaló. Tus respaldos y datos personales se conservaron.", "ProBackUp");
     }
@@ -174,7 +181,7 @@ internal sealed class InstallerForm : Form
     private bool busy;
     public InstallerForm()
     {
-        Text = "Instalar ProBackUp 3.4"; Size = new Size(740, 610); MinimumSize = new Size(700, 610); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); BackColor = Color.White; AutoScaleMode = AutoScaleMode.Dpi;
+        Text = "Instalar ProBackUp 3.4.3"; Size = new Size(740, 610); MinimumSize = new Size(700, 610); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); BackColor = Color.White; AutoScaleMode = AutoScaleMode.Dpi;
         var iconResource = Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico"); if (iconResource != null) Icon = new Icon(iconResource);
         var table = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(32), ColumnCount = 1, RowCount = 10 }; table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 10; i++) table.RowStyles.Add(new RowStyle(i == 8 ? SizeType.Percent : SizeType.AutoSize, i == 8 ? 100 : 0));
         var brand = new Panel { Dock = DockStyle.Top, Height = 82 }; var logoStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("logo.png");

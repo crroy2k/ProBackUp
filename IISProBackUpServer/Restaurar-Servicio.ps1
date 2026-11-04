@@ -21,9 +21,10 @@ if($site){$binding=Get-WebBinding -Name $state.SiteName -Protocol https | Where-
 $dataRoot=Join-Path $env:ProgramData 'ProBackUpServer'
 Assert-NoLinks $dataRoot
 $sid=(New-Object Security.Principal.NTAccount ('IIS AppPool\'+$state.PoolName)).Translate([Security.Principal.SecurityIdentifier])
-$acl=Get-Acl -LiteralPath $dataRoot
-$rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'Modify','ContainerInherit,ObjectInherit','None','Allow')
-$acl.RemoveAccessRuleSpecific($rule);Set-Acl -LiteralPath $dataRoot -AclObject $acl
+$securityBackend=Join-Path $PSScriptRoot 'Backend\ProBackUp.Server.exe'
+Assert-NoLinks $securityBackend
+& $securityBackend --secure-data --retire-pool $sid.Value
+if($LASTEXITCODE -ne 0){throw 'No se pudieron retirar los permisos IIS de los datos.'}
 $marker=Join-Path $dataRoot 'iis-hosting.json'
 if(Test-Path -LiteralPath $marker){Remove-Item -LiteralPath $marker}
 Set-ServiceStartup $state.StartMode $state.Delayed
