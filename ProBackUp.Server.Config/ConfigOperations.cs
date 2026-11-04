@@ -26,10 +26,11 @@ internal static class ConfigOperations
         if (File.Exists(Path.Combine(Configuration.DefaultRoot, "iis-hosting.json"))) throw new InvalidOperationException("Este servidor está publicado en IIS. Administra usuarios y LDAPS desde el panel y HTTPS desde IIS. Para volver al servicio usa Restaurar-Servicio.ps1 del paquete IIS.");
         settings.Validate();
         if (ServerControl.Binary() == null) await ServerControl.Install();
-        var binary = ServerControl.Binary()!; ServerControl.PrepareRuntime();
+        var binary = ServerControl.Binary()!;
         bool wasRunning = ServerControl.Stop();
         try
         {
+            ServerControl.PrepareRuntime();
             using var transaction = new ConfigFiles(Configuration.DefaultRoot);
             transaction.Save(settings, pfx);
             using var firewall = new ServerControl.FirewallChange(binary, settings.Port);
