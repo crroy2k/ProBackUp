@@ -41,12 +41,14 @@ Set-Content -LiteralPath $marker -Value 'ProBackUpServer'
 if (-not $service) {
     New-Service -Name ProBackUpServer -BinaryPathName $expectedPath -StartupType Automatic -DisplayName 'ProBackUp Server' | Out-Null
 }
-& sc.exe sidtype ProBackUpServer unrestricted
+& (Join-Path ([Environment]::GetFolderPath('System')) 'sc.exe') sidtype ProBackUpServer unrestricted
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo asignar la identidad del servicio.' }
-& sc.exe failure ProBackUpServer reset= 86400 actions= restart/10000/restart/30000/restart/60000
+& (Join-Path ([Environment]::GetFolderPath('System')) 'sc.exe') failure ProBackUpServer reset= 86400 actions= restart/10000/restart/30000/restart/60000
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo configurar la recuperación.' }
-& sc.exe config ProBackUpServer start= delayed-auto obj= 'NT SERVICE\ProBackUpServer'
+& (Join-Path ([Environment]::GetFolderPath('System')) 'sc.exe') config ProBackUpServer start= delayed-auto obj= 'NT SERVICE\ProBackUpServer'
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo configurar la cuenta del servicio.' }
+& $targetExe --secure-data
+if ($LASTEXITCODE -ne 0) {throw 'No se pudieron proteger los datos. Revise propietario, enlaces y archivos abiertos.'}
 $configuratorSource = Join-Path $PSScriptRoot 'ProBackUp.Server.Config.exe'
 $configuratorTarget = Join-Path $resolvedTarget 'ProBackUp.Server.Config.exe'
 if (Test-Path -LiteralPath $configuratorSource) {

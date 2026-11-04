@@ -90,12 +90,22 @@ internal sealed class Configuration
         for (var p = Path.GetFullPath(path); !string.IsNullOrEmpty(p); p = Path.GetDirectoryName(p))
             if ((File.Exists(p) || Directory.Exists(p)) && File.GetAttributes(p).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("No se admiten redirecciones: " + p);
     }
-    internal static void SecureDirectory(string root)
+    internal static void SecureDirectory(string root, string? pool = null, string? retiredPool = null)
     {
-        NoLinks(root); var dir = Directory.CreateDirectory(root); var acl = new DirectorySecurity(); acl.SetAccessRuleProtection(true, false);
-        foreach (var sid in new[] { "S-1-5-18", "S-1-5-32-544" }) acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid), FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-        try { var sid = (SecurityIdentifier)new NTAccount(@"NT SERVICE\ProBackUpServer").Translate(typeof(SecurityIdentifier)); acl.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.Modify, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow)); } catch (IdentityNotMappedException) { }
-        dir.SetAccessControl(acl);
+        ProBackUp.Security.WindowsFileSecurity.RequireAdministrator();
+        var modifiers = new List<SecurityIdentifier>();
+        try { modifiers.Add((SecurityIdentifier)new NTAccount(@"NT SERVICE\ProBackUpServer").Translate(typeof(SecurityIdentifier))); }
+        catch (IdentityNotMappedException) { }
+        SecurityIdentifier PoolSid(string value)
+        {
+            if (value.StartsWith("S-1-5-82-", StringComparison.Ordinal)) return new SecurityIdentifier(value);
+            if (!value.StartsWith(@"IIS APPPOOL\", StringComparison.OrdinalIgnoreCase) || value.Length > 128)
+                throw new ArgumentException("Identidad IIS inválida.");
+            return (SecurityIdentifier)new NTAccount(value).Translate(typeof(SecurityIdentifier));
+        }
+        if (pool != null) modifiers.Add(PoolSid(pool));
+        var previous = retiredPool == null ? Array.Empty<SecurityIdentifier>() : [PoolSid(retiredPool)];
+        ProBackUp.Security.WindowsFileSecurity.SecureTree(root, modifiers, previousOwners: previous);
     }
     internal static string Protect(string value) => Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.LocalMachine));
     internal static string Unprotect(string value) => Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), null, DataProtectionScope.LocalMachine));

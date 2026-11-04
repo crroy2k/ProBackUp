@@ -103,3 +103,7 @@ Las órdenes recogidas sin sesión se muestran como Esperando sesión y se conse
 Referencias de implementación: [WTSQueryUserToken](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsqueryusertoken) y [WindowsIdentity.RunImpersonated](https://learn.microsoft.com/en-us/dotnet/api/system.security.principal.windowsidentity.runimpersonated).
 
 Inicio de sesion (3.4.2): permite escribir solo el usuario, por ejemplo rourena. El servidor lo resuelve a un unico UPN de la lista autorizada; si el nombre es ambiguo entre dominios, debe escribirse el UPN completo. Conserva LDAPS, permisos y limites de intentos. El pie de pagina queda centrado.
+
+## Seguridad en 3.5.2
+
+El instalador y el configurador invocan herramientas de Windows por rutas absolutas. Antes de guardar secretos se validan los propietarios de la carpeta de datos y sus archivos, se rechazan enlaces y se rechazan permisos de otras cuentas. La revisión requiere que los procesos de servidor estén detenidos. Las carpetas de propietario inesperado requieren revisión de T.I. El paquete IIS aplica la misma política durante migración y reversión. La configuración y el historial existentes se conservan. Las comprobaciones de seguridad de Windows se ejecutan también en CI.

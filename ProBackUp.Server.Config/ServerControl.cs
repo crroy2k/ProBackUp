@@ -40,7 +40,7 @@ internal static class ServerControl
         if (Binary() != null) return;
         var script = Path.Combine(AppContext.BaseDirectory, "Install-ProBackUpServer.ps1"); Configuration.NoLinks(script);
         if (!File.Exists(script) || !File.Exists(Path.Combine(AppContext.BaseDirectory, "ProBackUp.Server.exe"))) throw new IOException("Coloca el configurador junto a ProBackUp.Server.exe y su instalador, dentro de la carpeta server.");
-        var info = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-File", script, "-PrepareOnly" }) info.ArgumentList.Add(arg);
         using var process = Process.Start(info)!; var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
         if (process.ExitCode != 0) throw new IOException("No se pudo preparar el servicio.\n" + await output + "\n" + await error);

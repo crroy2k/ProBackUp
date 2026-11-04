@@ -22,11 +22,19 @@ internal static class Program
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         try
         {
+            if (args.Length == 2 && args[0] == "--security-test") { ProBackUp.Security.SecurityRegression.Run(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--self-test") { await ServerTests.Run(args[1]); return 0; }
             if (args.SequenceEqual(["--configure"]))
             {
                 if (File.Exists(Path.Combine(Configuration.DefaultRoot, "iis-hosting.json"))) throw new InvalidOperationException("Este servidor se administra desde IIS. No se reconfigura con el asistente independiente mientras IIS este activo.");
                 await Bootstrap.Configure(); return 0;
+            }
+            if (args.Length == 3 && args[0] == "--secure-data" && args[1] == "--retire-pool")
+            { Configuration.SecureDirectory(Configuration.DefaultRoot, retiredPool: args[2]); return 0; }
+            if (args.Length is 1 or 2 && args[0] == "--secure-data")
+            {
+                Configuration.SecureDirectory(Configuration.DefaultRoot, args.Length == 2 ? args[1] : null);
+                return 0;
             }
             var config = Configuration.Load(Configuration.DefaultRoot);
             if (args.Length == 2 && args[0] == "--backup-db") { new Database(config.Root).Backup(Path.GetFullPath(args[1])); return 0; }

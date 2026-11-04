@@ -13,3 +13,5 @@ Windows x64 y SDK .NET 10. Ejecuta en PowerShell:
 Los ejecutables y paquetes se generan en `dist/` y no estan versionados.
 
 Las ramas `cliente`, `server` e `iis` contienen unicamente su componente y sus dependencias. `main` conserva el proyecto integrado. No se incluyen certificados, credenciales ni datos locales.
+
+Version de seguridad 3.5.2. Consulta las notas del componente incluidas en este repositorio.
