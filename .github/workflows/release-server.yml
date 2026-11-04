@@ -45,6 +45,6 @@ jobs:
           $tag = 'server-v' + $version
           gh release view $tag --repo $env:RELEASE_REPOSITORY *> $null
           if ($LASTEXITCODE -eq 0) { Write-Output 'Esta version ya esta publicada; no se reemplazan sus archivos.'; exit 0 }
-          $notes = "Servidor ProBackUp $version. Incluye paquetes independientes para IIS y servicio Windows, con exportacion del historial a Excel. Use IISProBackUpServer.zip para IIS o ProBackUp-Server.zip para servicio Windows. No contiene certificados privados, credenciales ni datos locales. Fuente: rama iis."
+          $notes = "Servidor ProBackUp $version. Corrige el inicio de sesion al regresar a una pestana con sesion vencida, renovando el token CSRF en cada intento de login. Incluye paquetes independientes para IIS y servicio Windows. Use IISProBackUpServer.zip para IIS o ProBackUp-Server.zip para servicio Windows. No contiene certificados privados, credenciales ni datos locales. Fuente: rama iis."
           gh release create $tag dist/IISProBackUpServer.zip dist/IISProBackUpServer.sha256 dist/ProBackUp-Server.zip dist/ProBackUp-Server.sha256 --repo $env:RELEASE_REPOSITORY --target $env:RELEASE_COMMIT --title "ProBackUp Server $version (IIS y servicio Windows)" --notes $notes --latest=false
           if ($LASTEXITCODE -ne 0) { throw 'No se pudo publicar la version del servidor.' }

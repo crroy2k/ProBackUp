@@ -1,9 +1,9 @@
 ﻿'use strict';
 const $=id=>document.getElementById(id);let csrf='',page=0,admin=false;
 const say=text=>{$('message').textContent=text};
-async function api(path,body){const res=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf},body:body===undefined?undefined:JSON.stringify(body)});if(!res.ok){if(res.status===401){showLogin();throw Error('Sesión no válida o credenciales no autorizadas.')}throw Error(res.status===429?'Demasiados intentos. Espere antes de volver a intentar.':res.status===403?'Acceso denegado.':res.status===503?'Servicio no disponible. Llame a T.I. Ext. 233.':'No se guardó. Revise los campos y la conexión al directorio.')}const text=await res.text();return text?JSON.parse(text):null}
+async function api(path,body){const res=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf},body:body===undefined?undefined:JSON.stringify(body)});if(!res.ok){if(res.status===401){showLogin();throw Error('Sesión no válida o credenciales no autorizadas.')}throw Error(res.status===429?'Demasiados intentos. Espere antes de volver a intentar.':res.status===403?'Acceso denegado.':res.status===503?'Servicio no disponible. Llame a T.I. Ext. 233.':'No se guardó. Revise los campos y la conexión al directorio.')}const text=await res.text();return text?JSON.parse(text):null}
 async function token(){csrf=(await api('/api/csrf')).token}
-function showLogin(){for(const id of ['remoteBackup','editClient','details'])if($(id).open)$(id).close();$('login').hidden=false;$('dashboard').hidden=true;$('logout').hidden=true;$('identity').textContent='';$('agentToken').value='';$('enrollment').hidden=true}
+function showLogin(){csrf='';admin=false;$('password').value='';$('bindPassword').value='';for(const id of ['remoteBackup','editClient','details'])if($(id).open)$(id).close();$('login').hidden=false;$('dashboard').hidden=true;$('logout').hidden=true;$('identity').textContent='';$('agentToken').value='';$('enrollment').hidden=true}
 function node(tag,text,cls){const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;return e}
 function bytes(n){if(!n)return '0 B';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return n.toLocaleString('es-CR',{maximumFractionDigits:2})+' '+units[i]}
 function time(value){return value?new Intl.DateTimeFormat('es-CR',{timeZone:'America/Costa_Rica',dateStyle:'short',timeStyle:'medium'}).format(new Date(value)):'Sin contacto'}
@@ -81,7 +81,7 @@ $('refreshRemote').onclick=guarded(remoteJobs);$('closeRemote').onclick=()=>$('r
 setInterval(()=>{if($('remoteBackup').open)remoteRequests().catch(error=>{$('remoteMessage').textContent=error.message})},5000);
 $('editClientForm').onsubmit=guarded(async()=>{await api('/api/admin/agents/'+editingClient+'/edit',{name:$('editClientName').value.trim()});$('editClient').close();await registered();say('Nombre del cliente actualizado.')});
 $('cancelEditClient').onclick=()=>$('editClient').close();
-$('loginForm').onsubmit=guarded(async()=>{try{await api('/api/login',{upn:$('upn').value.trim(),password:$('password').value});await enter()}finally{$('password').value=''}});
+$('loginForm').onsubmit=guarded(async()=>{try{await token();await api('/api/login',{upn:$('upn').value.trim(),password:$('password').value});await enter()}finally{$('password').value=''}});
 $('logout').onclick=guarded(async()=>{await api('/api/logout',{});showLogin();await token()});
 $('exportReports').onclick=guarded(async()=>{
 const button=$('exportReports');button.disabled=true;button.textContent='Exportando…';
@@ -99,3 +99,19 @@ $('registerForm').onsubmit=guarded(async()=>{const created=await api('/api/admin
 (async()=>{try{await token();try{await enter()}catch{showLogin()}}catch(error){say(error.message)}})();
 
 setInterval(()=>{if(!$('dashboard').hidden&&!$('reportsPanel').hidden)machines().catch(error=>say(error.message))},60000);
+
+// Recheck cookies when returning to a tab that may have outlived its session.
+let checkingSession = false;
+async function checkSession() {
+    if (document.hidden || $('dashboard').hidden || checkingSession) return;
+    checkingSession = true;
+    try {
+        await api('/api/me');
+    } catch (error) {
+        say(error.message);
+    } finally {
+        checkingSession = false;
+    }
+}
+document.addEventListener('visibilitychange', checkSession);
+window.addEventListener('pageshow', checkSession);
