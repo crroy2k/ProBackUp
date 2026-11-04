@@ -61,6 +61,7 @@ public sealed class MainForm : Form
         Resize += (_, _) => { if (tray != null && WindowState == FormWindowState.Minimized) HideToTray(); };
         FormClosing += (_, e) =>
         {
+            if (e.CloseReason == CloseReason.WindowsShutDown && running != null) { e.Cancel = true; return; }
             if (e.CloseReason != CloseReason.UserClosing) return;
             if (tray != null && !exiting) { e.Cancel = true; HideToTray(); return; }
             if (running != null) { e.Cancel = true; MessageBox.Show(this, "Cancela la operación y espera a que termine antes de salir.", "Operación en curso"); }

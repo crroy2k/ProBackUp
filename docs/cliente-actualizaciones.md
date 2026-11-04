@@ -1,6 +1,8 @@
-﻿ProBackUp Cliente 3.4.3
+﻿ProBackUp Cliente 3.4.4
 
-Mejoras de seguridad en la actualización, el instalador y la restauración.
+El instalador solicita automáticamente a Windows el cierre de ProBackUp antes de reemplazar sus archivos. Al terminar vuelve a abrirlo si está marcada la opción Abrir ProBackUp al terminar. Si Windows no puede cerrarlo, muestra la causa y permite reintentar.
+
+Se corrige la validación de permisos genéricos de lectura y ejecución heredados de Archivos de programa. Se mantienen las verificaciones de propietario, enlaces y permisos de escritura.
 
 La búsqueda de versiones funciona con el usuario del escritorio. Tras confirmar, Windows solicita administrador para que el ayudante instalado en Program Files descargue y verifique la nueva versión en una carpeta protegida. Las versiones anteriores requieren instalar este paquete completo una vez para incorporar el nuevo ayudante.
 

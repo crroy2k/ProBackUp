@@ -1,4 +1,4 @@
-﻿ProBackUp 3.4.3 — Windows 10/11 x64
+﻿ProBackUp 3.4.4 — Windows 10/11 x64
 
 BUSCADOR Y FILTROS POR DÍA
 En Versiones de archivos, elige el día y la hora. Buscar archivo encuentra nombres
